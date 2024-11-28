@@ -1,4 +1,7 @@
+.vscode
 .venv
 __pycache__
 t-drive-trajectories
 fake-trajectories.csv
+.mypy_cache
+.pytest_cache

@@ -1,47 +1,13 @@
-from datetime import datetime
-from numpy import array, float64, floating, int64, shape
-from numpy.typing import NDArray
-from scipy import linalg
+from numpy import array, float64, int64
 
-
-def euclidean_distance(x: NDArray[floating], y: NDArray[floating]) -> float:
-    assert shape(x) == shape(y)
-    eucl_dis = linalg.norm(x - y)
-    assert isinstance(eucl_dis, float)
-    return eucl_dis
-
-
-class SpatioTemporalPoint:
-    def __init__(
-        self,
-        id: int,
-        timestamp: datetime,
-        x: float,
-        y: float,
-    ) -> None:
-        self.id = id
-        self.timestamp = timestamp
-        self.x = x
-        self.y = y
-
-    def distance(self, point: NDArray[floating]) -> float:
-        assert shape(point) == (2,)
-        return euclidean_distance(array([self.x, self.y]), point)
-
-
-class TrajectoryDatabase:
-    def __init__(
-        self,
-        trajectories: list[SpatioTemporalPoint],
-    ) -> None:
-        self.trajectories = trajectories
+from trajectory_clustering.trajectory import TrajectoryDatabase
 
 
 class ClusteringResult:
     def __init__(
         self,
-        labels: list[int],
-        cluster_centers: list[list[float]],
+        labels: list[int | int64],
+        cluster_centers: list[list[float | float64]],
     ) -> None:
         self.labels = array(labels, dtype=int64)
         self.cluster_centers = array(cluster_centers, dtype=float64)
@@ -50,13 +16,25 @@ class ClusteringResult:
 class Modification:
     def __init__(
         self,
-        id: int,
-        cluster: int,
-        distance: float,
+        id: int | int64,
+        cluster: int | int64,
+        distance: float | float64,
     ) -> None:
-        self.id = id
-        self.cluster = cluster
-        self.distance = distance
+        self.id = int64(id)
+        self.cluster = int64(cluster)
+        self.distance = float64(distance)
+
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, Modification):
+            return False
+        return (
+            self.id == value.id
+            and self.cluster == value.cluster
+            and self.distance == value.distance
+        )
+
+    def __repr__(self) -> str:
+        return f"Modification({self.id!r}, {self.cluster!r}, {self.distance!r})"
 
 
 def phi_sub_optimal_inidividual(
@@ -74,5 +52,5 @@ def phi_sub_optimal_inidividual(
             distance = p.distance(c_center) - p.distance(k_center)
             modifications.append(Modification(p.id, c, distance))
 
-    modifications.sort(key=lambda x: x.distance)
+    modifications.sort(key=lambda x: float(x.distance))
     return modifications[0:phi]

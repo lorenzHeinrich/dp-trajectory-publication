@@ -1,13 +1,11 @@
 import random
-import numpy as np
 import csv
-import animate
-import pandas as pd
+import numpy as np
 
-grid_size = 200
-num_points = 100
-num_users = 20
-max_velocity = 20
+grid_size = 10
+num_points = 5
+num_users = 4
+max_velocity = 2
 
 def constrain_movement(x, y):
     positive_x = min(max_velocity, grid_size - x)
@@ -27,7 +25,7 @@ for user in range(num_users):
         data[user * num_points + point] = [user, point, x, y]
 data = data.astype(int)
 
-with open("fake-trajectories.csv", "w") as f:
+with open("fake-trajectories_10x10.csv", "w") as f:
     writer = csv.writer(f)
     writer.writerow(["id", "timestamp", "longitude", "latitude"])
     writer.writerows(data)
