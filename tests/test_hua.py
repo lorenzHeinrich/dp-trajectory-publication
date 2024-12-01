@@ -1,14 +1,16 @@
+import math
 from numpy import array
-from pandas import read_csv
+from pandas import DataFrame, read_csv
 import pytest
+from sklearn.cluster import KMeans
 from trajectory_clustering.hua import (
     ClusteringResult,
-    Modification,
-    TrajectoryDatabase,
+    phi_sub_optimal,
     phi_sub_optimal_inidividual,
 )
 from trajectory_clustering.trajectory import (
     SpatioTemporalPoint,
+    TrajectoryDatabase,
     euclidean_distance,
 )
 
@@ -21,55 +23,100 @@ def test_euclidean_distance():
     assert euclidean_distance(x, y) == euclidean_distance(y, x)
 
 
+timestamps = range(5)
+
+
+@pytest.fixture(params=["4x5", "20x5"])
+def db(request) -> DataFrame:
+    return read_csv(
+        f"tests/data/fake-trajectories_{request.param}.csv",
+    )
+
+
 @pytest.fixture
-def db_t0():
-    df = read_csv("tests/data/fake-trajectories_10x10.csv", parse_dates=["timestamp"])
+def clusters(db) -> dict[int, ClusteringResult]:
+    result = {}
+    n_clusters = 3
+    kmeans = KMeans(n_clusters=n_clusters)
+    for t in set(db["timestamp"]):
+        points = db[db["timestamp"] == t][["longitude", "latitude"]]
+        kmeans.fit(points)
+        result[int(t)] = ClusteringResult(kmeans.labels_, kmeans.cluster_centers_)
+    return result
+
+
+def toTrajectoryDB(df: DataFrame) -> TrajectoryDatabase:
     return TrajectoryDatabase(
-        list(
-            filter(
-                lambda p: p.timestamp == "0",
-                map(
-                    lambda t: SpatioTemporalPoint(*t),
-                    df.itertuples(index=False, name=None),
-                ),
-            )
-        )
+        [
+            SpatioTemporalPoint(row[0], row[1], float(row[2]), float(row[3]))
+            for row in df.itertuples(index=False)
+        ]
     )
 
 
-@pytest.fixture
-def clusters_t0():
-    return ClusteringResult(
-        labels=[2, 0, 0, 1],
-        cluster_centers=[[0, 3.5], [8, 8], [7, 9]],
+@pytest.mark.parametrize("t", timestamps)
+def test_phi_sub_optimal_inidividual(db, clusters, t):
+    points = db[db["timestamp"] == str(t)]
+    clusters_t = clusters[t]
+    n_clusters = len(set(clusters_t.labels))
+    expected_size = len(points) * (n_clusters - 1)
+    result = phi_sub_optimal_inidividual(
+        toTrajectoryDB(points),
+        clusters_t,
+        expected_size,
     )
-
-
-@pytest.fixture
-def all_modifications_t0():
-    return [
-        Modification(0, 1, 1.41),
-        Modification(3, 2, 1.41),
-        Modification(1, 2, 8.10),
-        Modification(1, 1, 8.44),
-        Modification(2, 2, 8.72),
-        Modification(0, 0, 8.90),
-        Modification(2, 1, 8.93),
-        Modification(3, 0, 9.18),
+    pairs = [
+        (result[i], result[j])
+        for i in range(len(result))
+        for j in range(i + 1, len(result))
     ]
+    # no duplicates in terms of id and cluster
+    assert all([m1.id != m2.id or m1.cluster != m2.cluster for m1, m2 in pairs])
+    # should have n * (k - 1) elements, where n is the number of points and k the number of clusters
+    assert len(result) == expected_size
 
 
-def test_phi_sub_optimal_inidividual_simple(db_t0, clusters_t0, all_modifications_t0):
-    phi = len(all_modifications_t0)
-    result = phi_sub_optimal_inidividual(db_t0, clusters_t0, phi)
-    result = list(
-        map(
-            lambda m: Modification(
-                m.id,
-                m.cluster,
-                round(m.distance, 2),
-            ),
-            result,
-        )
+@pytest.mark.parametrize("t", timestamps)
+def test_phi_sub_optimal(db, clusters, t):
+    points = db[db["timestamp"] == t]
+    cluster_t = clusters[t]
+    n_clusters = len(set(cluster_t.labels))
+    n_points = len(points)
+    expected_size = min(
+        int(
+            sum(
+                [
+                    math.comb(n_points, i) * math.pow(n_clusters - 1, i)
+                    for i in range(1, n_points + 1)
+                ]
+            )
+        ),
+        500,
     )
-    assert result == all_modifications_t0
+    result = phi_sub_optimal(
+        toTrajectoryDB(points),
+        clusters[t],
+        expected_size,
+    )
+
+    # no repeated modifications of individual points in a modification
+    assert all(
+        len([m.id for m in mod]) == len(set([m.id for m in mod])) for mod in result
+    )
+
+    # no duplicate modifications
+    sort_by_id_cluster = lambda x: (x.id, x.cluster)
+    duplicate = lambda x, y: (
+        sorted(x, key=sort_by_id_cluster) == sorted(y, key=sort_by_id_cluster)
+    )
+    pairs = [
+        (result[i], result[j])
+        for i in range(len(result))
+        for j in range(i + 1, len(result))
+    ]
+    assert all(not duplicate(x, y) for x, y in pairs)
+
+    # result should have sum_{i=1}^{n} (n choose i) * (k - 1)^i elements,
+    # where n is the number of points and k the number of clusters.
+    # We limit the expected size to 500, which is the paramter phi
+    assert len(result) == expected_size

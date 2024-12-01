@@ -34,6 +34,9 @@ class SpatioTemporalPoint:
             and self.y == value.y
         )
 
+    def __repr__(self) -> str:
+        return f"SpatioTemporalPoint({self.id!r}, {self.timestamp!r}, {self.x!r}, {self.y!r})"
+
     def distance(self, point: NDArray[floating]) -> float:
         assert shape(point) == (2,)
         return euclidean_distance(array([self.x, self.y]), point)
@@ -50,3 +53,6 @@ class TrajectoryDatabase:
         if not isinstance(value, TrajectoryDatabase):
             return False
         return self.trajectories == value.trajectories
+
+    def __repr__(self) -> str:
+        return f"TrajectoryDatabase({self.trajectories!r})"
