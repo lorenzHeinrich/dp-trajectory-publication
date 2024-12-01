@@ -73,11 +73,13 @@ def phi_sub_optimal(
         tmp = [[indiv_mod]]
 
         for mod in result:
-            if all(m.id != indiv_mod.id for m in mod):
+            if all(indiv_mod.id != m.id for m in mod):
                 new_mod = mod.copy()
                 new_mod.append(indiv_mod)
                 tmp.append(new_mod)
 
-        result = result + tmp
-
+        result += tmp
+        result.sort(key=lambda x: sum(m.distance for m in x))
+        if len(result) > phi:
+            result = result[0:phi]
     return result

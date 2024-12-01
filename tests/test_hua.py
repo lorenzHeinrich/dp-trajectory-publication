@@ -1,7 +1,9 @@
+import logging
 import math
+import time
+import pytest
 from numpy import array
 from pandas import DataFrame, read_csv
-import pytest
 from sklearn.cluster import KMeans
 from trajectory_clustering.hua import (
     ClusteringResult,
@@ -13,6 +15,8 @@ from trajectory_clustering.trajectory import (
     TrajectoryDatabase,
     euclidean_distance,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 def test_euclidean_distance():
@@ -26,7 +30,7 @@ def test_euclidean_distance():
 timestamps = range(5)
 
 
-@pytest.fixture(params=["4x5", "20x5"])
+@pytest.fixture(params=["4x5", "20x5", "1000x5"])
 def db(request) -> DataFrame:
     return read_csv(
         f"tests/data/fake-trajectories_{request.param}.csv",
@@ -56,7 +60,7 @@ def toTrajectoryDB(df: DataFrame) -> TrajectoryDatabase:
 
 @pytest.mark.parametrize("t", timestamps)
 def test_phi_sub_optimal_inidividual(db, clusters, t):
-    points = db[db["timestamp"] == str(t)]
+    points = db[db["timestamp"] == t]
     clusters_t = clusters[t]
     n_clusters = len(set(clusters_t.labels))
     expected_size = len(points) * (n_clusters - 1)
@@ -71,9 +75,14 @@ def test_phi_sub_optimal_inidividual(db, clusters, t):
         for j in range(i + 1, len(result))
     ]
     # no duplicates in terms of id and cluster
-    assert all([m1.id != m2.id or m1.cluster != m2.cluster for m1, m2 in pairs])
+    assert all(m1.id != m2.id or m1.cluster != m2.cluster for m1, m2 in pairs)
     # should have n * (k - 1) elements, where n is the number of points and k the number of clusters
     assert len(result) == expected_size
+
+    # sorted ascendingly by distance
+    assert all(
+        result[i].distance <= result[i + 1].distance for i in range(len(result) - 1)
+    )
 
 
 @pytest.mark.parametrize("t", timestamps)
@@ -82,23 +91,25 @@ def test_phi_sub_optimal(db, clusters, t):
     cluster_t = clusters[t]
     n_clusters = len(set(cluster_t.labels))
     n_points = len(points)
-    expected_size = min(
-        int(
+    expected_size = int(
+        min(
             sum(
                 [
                     math.comb(n_points, i) * math.pow(n_clusters - 1, i)
                     for i in range(1, n_points + 1)
                 ]
-            )
-        ),
-        500,
+            ),
+            500,
+        )
     )
+    start = time.time()
     result = phi_sub_optimal(
         toTrajectoryDB(points),
         clusters[t],
         expected_size,
     )
-
+    end = time.time()
+    LOGGER.info(f"phi_sub_optimal took: {end - start} seconds")
     # no repeated modifications of individual points in a modification
     assert all(
         len([m.id for m in mod]) == len(set([m.id for m in mod])) for mod in result
@@ -120,3 +131,9 @@ def test_phi_sub_optimal(db, clusters, t):
     # where n is the number of points and k the number of clusters.
     # We limit the expected size to 500, which is the paramter phi
     assert len(result) == expected_size
+
+    # sorted ascendingly by sum of distances
+    assert all(
+        sum(m.distance for m in result[i]) <= sum(m.distance for m in result[i + 1])
+        for i in range(len(result) - 1)
+    )
