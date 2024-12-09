@@ -8,9 +8,10 @@ from pandas import DataFrame, read_csv
 from sklearn.cluster import KMeans
 from trajectory_clustering.hua import (
     ClusteringResult,
+    location_generalization,
     phi_sub_optimal,
     phi_sub_optimal_inidividual,
-    s_k_means_partitions,
+    s_kmeans_partitions,
 )
 from trajectory_clustering.trajectory import (
     SpatioTemporalPoint,
@@ -143,10 +144,16 @@ def test_phi_sub_optimal(db, clusters, timestamp):
 
 
 @pytest.mark.parametrize("db", ["500x5"], indirect=True)
-def test_s_k_means_partitions(db):
+def test_s_kmeans_partitions(db):
     db_t0 = db[db["timestamp"] == 0]
     trajectory_db = to_trajectory_db(db_t0)
-    partitions = s_k_means_partitions(trajectory_db, 20)
+    partitions = s_kmeans_partitions(trajectory_db.trajectories, 20)
 
     assert len(partitions) == len(trajectory_db.trajectories)
     assert all(len(p.cluster_centers) == 20 for p in partitions)
+
+
+@pytest.mark.parametrize("db", ["20x5", "500x5"], indirect=True)
+def test_location_generalization(db):
+    trajectory_db = to_trajectory_db(db)
+    location_generalization(trajectory_db, 2, 20, 0.1)
