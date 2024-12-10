@@ -5,7 +5,7 @@ from datetime import datetime
 
 from trajectory_clustering.mechanisms import exponential_mechanism
 from trajectory_clustering.trajectory import (
-    SpatioTemporalPoint,
+    STPoint,
     TrajectoryDatabase,
 )
 
@@ -40,7 +40,7 @@ class Modification:
 class ClusteringResult:
     def __init__(
         self,
-        trajectories: list[SpatioTemporalPoint],
+        trajectories: list[STPoint],
         labels: list[int] | NDArray[int64],
         cluster_centers: list[list[float]] | NDArray[float64],
     ) -> None:
@@ -48,7 +48,7 @@ class ClusteringResult:
         self.n_trajectories = len(trajectories)
         self.cluster_labels = set(labels)
         self.cluster_centers = array(cluster_centers, dtype=float64)
-        self.clusters: dict[int, dict[int, SpatioTemporalPoint]] = dict()
+        self.clusters: dict[int, dict[int, STPoint]] = dict()
         for l, p in zip(labels, trajectories):
             self.clusters.setdefault(l, dict())[p.id] = p
 
@@ -126,9 +126,7 @@ def phi_sub_optimal(
     return result
 
 
-def s_kmeans_partitions(
-    trajectories: list[SpatioTemporalPoint], m: int
-) -> list[ClusteringResult]:
+def s_kmeans_partitions(trajectories: list[STPoint], m: int) -> list[ClusteringResult]:
     kmeans = KMeans(n_clusters=m)
     partitions = []
     for i in range(len(trajectories)):
@@ -143,8 +141,8 @@ def s_kmeans_partitions(
 
 def location_generalization(
     database: TrajectoryDatabase, m, phi, eps
-) -> dict[datetime, list[SpatioTemporalPoint]]:
-    by_time: dict[datetime, list[SpatioTemporalPoint]] = {}
+) -> dict[datetime, list[STPoint]]:
+    by_time: dict[datetime, list[STPoint]] = {}
     for locations in database.trajectories:
         by_time.setdefault(locations.timestamp, []).append(locations)
 
@@ -154,7 +152,7 @@ def location_generalization(
     n_trajectories_per_t = lengths[0]
     assert m <= n_trajectories_per_t - 2
 
-    generalized: dict[datetime, list[SpatioTemporalPoint]] = {}
+    generalized: dict[datetime, list[STPoint]] = {}
     kmeans = KMeans(n_clusters=m)
     for time, locations in by_time.items():
         partitions = s_kmeans_partitions(locations, m)
@@ -177,7 +175,7 @@ def location_generalization(
             c = p.cluster_centers[cluster]
             id = hash(locations.values())
             generalized.setdefault(time, []).append(
-                SpatioTemporalPoint(id, time, float(c[0]), float(c[1]))
+                STPoint(id, time, float(c[0]), float(c[1]))
             )
 
     return generalized

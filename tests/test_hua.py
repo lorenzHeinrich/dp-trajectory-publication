@@ -14,7 +14,7 @@ from trajectory_clustering.hua import (
     s_kmeans_partitions,
 )
 from trajectory_clustering.trajectory import (
-    SpatioTemporalPoint,
+    STPoint,
     TrajectoryDatabase,
     euclidean_distance,
 )
@@ -59,7 +59,7 @@ def timestamp(db) -> int:
 def to_trajectory_db(df: DataFrame) -> TrajectoryDatabase:
     return TrajectoryDatabase(
         [
-            SpatioTemporalPoint(row[0], row[1], float(row[2]), float(row[3]))
+            STPoint(row[0], row[1], float(row[2]), float(row[3]))
             for row in df.itertuples(index=False)
         ]
     )
