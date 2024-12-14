@@ -1,23 +1,22 @@
 import logging
 import math
-import random
 import time
 import pytest
 from numpy import array
 from pandas import DataFrame, read_csv
-from sklearn.cluster import KMeans
+
+from trajectory_clustering.cluster import Partition, kmeans_partitioning
 from trajectory_clustering.hua import (
-    ClusteringResult,
     location_generalization,
     phi_sub_optimal,
     phi_sub_optimal_inidividual,
     s_kmeans_partitions,
 )
 from trajectory_clustering.trajectory import (
-    STPoint,
     TrajectoryDatabase,
     euclidean_distance,
 )
+from trajectory_clustering.visualize import stepwise_plot
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,51 +30,33 @@ def test_euclidean_distance():
 
 
 @pytest.fixture(params=["4x5", "20x5", "500x5"])
-def db(request) -> DataFrame:
+def df(request) -> DataFrame:
     return read_csv(
         f"tests/data/fake-trajectories_{request.param}.csv",
     )
 
 
 @pytest.fixture
-def clusters(db, timestamp) -> ClusteringResult:
-    n_clusters = round(len(db) / 10)
-    kmeans = KMeans(n_clusters=n_clusters)
-    trajectory_db = to_trajectory_db(db[db["timestamp"] == timestamp])
-    points = [[p.x, p.y] for p in trajectory_db.trajectories]
-    kmeans.fit(points)
-    return ClusteringResult(
-        trajectory_db.trajectories, kmeans.labels_, kmeans.cluster_centers_
-    )
+def db(df) -> TrajectoryDatabase:
+    return TrajectoryDatabase.from_dataframe(df)
 
 
 @pytest.fixture
-def timestamp(db) -> int:
-    timestamps = set(db["timestamp"])
-    rand_index = random.randint(0, len(timestamps) - 1)
-    return list(timestamps)[rand_index]
+def partition(db) -> Partition:
+    n_clusters = max(2, round(db.size / 4))
+    return kmeans_partitioning(db, n_clusters)
 
 
-def to_trajectory_db(df: DataFrame) -> TrajectoryDatabase:
-    return TrajectoryDatabase(
-        [
-            STPoint(row[0], row[1], float(row[2]), float(row[3]))
-            for row in df.itertuples(index=False)
-        ]
-    )
+def test_phi_sub_optimal_inidividual(db, partition):
 
-
-def test_phi_sub_optimal_inidividual(db, clusters, timestamp):
-    points = db[db["timestamp"] == timestamp]
-
-    expected_size = min(len(points) * (clusters.n_clusters - 1), 1000)
+    expected_size = min(db.size * (partition.n_labels - 1), 1000)
     start = time.time()
     result = phi_sub_optimal_inidividual(
-        clusters,
+        partition,
         expected_size,
     )
     end = time.time()
-    LOGGER.info(f"phi_sub_optimal_inidividual took: {end - start} seconds")
+    LOGGER.info(f"phi_sub_optimal_inidividual took: {round(end - start, 3)} seconds")
     pairs = [
         (result[i], result[j])
         for i in range(len(result))
@@ -92,24 +73,22 @@ def test_phi_sub_optimal_inidividual(db, clusters, timestamp):
     )
 
 
-def test_phi_sub_optimal(db, clusters, timestamp):
-    points = db[db["timestamp"] == timestamp]
-    n_points = len(points)
+def test_phi_sub_optimal(db, partition):
     expected_size = (
-        500
-        if n_points > 10
+        1000
+        if db.size > 10
         else int(
             sum(
                 [
-                    math.comb(n_points, i) * math.pow(clusters.n_clusters - 1, i)
-                    for i in range(1, n_points + 1)
+                    math.comb(db.size, i) * math.pow(partition.n_labels - 1, i)
+                    for i in range(1, db.size + 1)
                 ]
             )
         )
     )
     start = time.time()
     result = phi_sub_optimal(
-        clusters,
+        partition,
         expected_size,
     )
     end = time.time()
@@ -129,7 +108,7 @@ def test_phi_sub_optimal(db, clusters, timestamp):
         for i in range(len(result))
         for j in range(i + 1, len(result))
     ]
-    assert all(not duplicate(x, y) for x, y in pairs)
+    assert not any(duplicate(x, y) for x, y in pairs)
 
     # result should have sum_{i=1}^{n} (n choose i) * (k - 1)^i elements,
     # where n is the number of points and k the number of clusters.
@@ -145,15 +124,15 @@ def test_phi_sub_optimal(db, clusters, timestamp):
 
 @pytest.mark.parametrize("db", ["500x5"], indirect=True)
 def test_s_kmeans_partitions(db):
-    db_t0 = db[db["timestamp"] == 0]
-    trajectory_db = to_trajectory_db(db_t0)
-    partitions = s_kmeans_partitions(trajectory_db.trajectories, 20)
+    m = int(db.size / max(2, db.size / 4))
+    partitions = s_kmeans_partitions(db, m)
 
-    assert len(partitions) == len(trajectory_db.trajectories)
-    assert all(len(p.cluster_centers) == 20 for p in partitions)
+    assert len(partitions) == db.size
+    assert all(len(p.mean_trajectories) == m for p in partitions)
 
 
-@pytest.mark.parametrize("db", ["20x5", "500x5"], indirect=True)
 def test_location_generalization(db):
-    trajectory_db = to_trajectory_db(db)
-    location_generalization(trajectory_db, 2, 20, 0.1)
+    partition = location_generalization(db, int(max(2, db.size / 5)), 20, 0.1)
+
+    stepwise_plot(partition)
+    print(partition)
