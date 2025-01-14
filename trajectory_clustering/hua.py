@@ -1,7 +1,7 @@
 from datetime import datetime
 import math
 import secrets
-from typing import Callable
+from typing import Callable, Iterable
 from numpy import float64, floating, int64
 
 from trajectory_clustering.cluster import Partition, kmeans_partitioning
@@ -144,28 +144,42 @@ def draw_trajectory(
     return Trajectory(hash(tuple(st_points)), st_points)
 
 
-def dp_release(
-    db: TrajectoryDatabase, partition: Partition, eps: float
-) -> list[tuple[int, Trajectory]]:
+def make_noisy_counts(partition: Partition, eps: float):
     query: Callable[[Partition], list[int]] = lambda x: [
         len(x.labled_trajectories[l]) for l in x.labels
     ]
-    noisy_counts = sorted(
-        laplace_mechanism(partition, query, sensitivity=1, eps=eps), reverse=True
+    return zip(
+        sorted(
+            laplace_mechanism(partition, query, sensitivity=1, eps=eps),
+            reverse=True,
+        ),
+        partition.labels,
     )
-    noisy_counts = list(map(lambda x: max(x, 0), noisy_counts))
 
+
+def num_is_by_intervals(
+    noisy_counts: list[int], partition, db, eps: float
+) -> dict[tuple[int, int], int]:
     num_remaining_possible_traj = len(partition.location_universe()) ** db.length - len(
         partition.mean_trajectories
     )
-    num_i = {
+    return {
         (a, b): round(num_remaining_possible_traj * laplace_integral(a, b, eps))
         for a, b in zip(noisy_counts[1:], noisy_counts[:-1])
         if abs(a - b) > 1
     }
+
+
+def dp_release(
+    db: TrajectoryDatabase, partition: Partition, eps: float
+) -> list[tuple[int, Trajectory]]:
+    # filter out non-positive counted trajectories
+    noisy_counts = list(filter(lambda x: x[0] > 0, make_noisy_counts(partition, eps)))
+    num_is = num_is_by_intervals([c for c, _ in noisy_counts], partition, db, eps)
+
     release: list[tuple[int, Trajectory]] = []
     acc_count = 0
-    for i, (c, l) in enumerate(zip(noisy_counts, partition.labels)):
+    for i, (c, l) in enumerate(noisy_counts):
         noisy_count = min(db.size - acc_count, c)
         release.append((noisy_count, partition.mean_trajectories[l]))
         acc_count += noisy_count
@@ -174,21 +188,32 @@ def dp_release(
 
         if i + 1 >= len(noisy_counts):
             continue
-        interval = (noisy_counts[i + 1], c)
-        if abs(interval[0] - interval[1]) == 0:
+        interval = (noisy_counts[i + 1][0], c)
+        if abs(interval[0] - interval[1]) <= 1:
             continue
 
-        num = num_i[interval]
-        while num > 0 and acc_count < db.size:
+        num_i = num_is[interval]
+        while num_i > 0 and acc_count < db.size:
             traj = draw_trajectory(partition.location_universe(), db.timestamps)
             rand_noisy_count = min(
                 db.size - acc_count, random_int(interval[0], interval[1])
             )
             release.append((rand_noisy_count, traj))
-            num -= 1
+            num_i -= 1
             acc_count += rand_noisy_count
 
         if acc_count >= db.size:
             break
+
+    # if we still have not enough trajectories, fill up with noisy trajectories
+    if acc_count < db.size:
+        smalest_noisy_count = noisy_counts[-1][0]
+        while acc_count < db.size:
+            traj = draw_trajectory(partition.location_universe(), db.timestamps)
+            rand_noisy_count = min(
+                db.size - acc_count, random_int(0, smalest_noisy_count)
+            )
+            release.append((rand_noisy_count, traj))
+            acc_count += rand_noisy_count
 
     return release
