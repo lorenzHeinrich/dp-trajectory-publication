@@ -94,7 +94,9 @@ class Trajectory:
 
 
 class TrajectoryDatabase:
-    def __init__(self, trajectories: list[Trajectory], timestamps: set) -> None:
+    def __init__(
+        self, trajectories: list[Trajectory], timestamps: set[datetime | int]
+    ) -> None:
         self.trajectories = dict((t.id, t) for t in trajectories)
         self.length = len(timestamps)
         self.timestamps = timestamps

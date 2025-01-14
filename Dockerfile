@@ -5,6 +5,6 @@ WORKDIR /app
 COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 
-COPY taxis/ taxis/
+COPY tests/ tests/
 COPY trajectory_clustering/ .
 

@@ -1,8 +1,21 @@
-from numpy import float64, floating, int64, mean
+from datetime import datetime
+import math
+import secrets
+from typing import Callable
+from numpy import float64, floating, int64
 
 from trajectory_clustering.cluster import Partition, kmeans_partitioning
-from trajectory_clustering.dp_mechanisms import exponential_mechanism
-from trajectory_clustering.trajectory import TrajectoryDatabase
+from trajectory_clustering.dp_mechanisms import (
+    exponential_mechanism,
+    laplace_mechanism,
+    random_int,
+)
+from trajectory_clustering.trajectory import (
+    Location,
+    STPoint,
+    Trajectory,
+    TrajectoryDatabase,
+)
 
 
 class Modification:
@@ -35,7 +48,7 @@ class Modification:
 def phi_sub_optimal_inidividual(
     p_opt: Partition,
     phi: int,
-):
+) -> list[Modification]:
     modifications: list[Modification] = []
 
     for l, group in p_opt.labled_trajectories.items():
@@ -51,7 +64,7 @@ def phi_sub_optimal_inidividual(
 def phi_sub_optimal(
     p_opt: Partition,
     phi: int,
-):
+) -> list[list[Modification]]:
     indiv_mods = phi_sub_optimal_inidividual(p_opt, phi)
     result = [[indiv_mods[0]]]
 
@@ -78,17 +91,17 @@ def s_kmeans_partitions(db: TrajectoryDatabase, m: int) -> list[Partition]:
     return partitions
 
 
-def mean_distance(partition: Partition):
+def mean_distance(partition: Partition) -> float:
     sum = 0
     for l, group in partition.labled_trajectories.items():
         group_sum = 0
         for traj in group.values():
             group_sum += traj.distance(partition.mean_trajectories[l])
         sum += group_sum / len(group) if len(group) > 0 else 0
-    return sum / partition.n_labels
+    return float(sum / partition.n_labels)
 
 
-def location_generalization(db: TrajectoryDatabase, m, phi, eps):
+def dp_location_generalization(db: TrajectoryDatabase, m, phi, eps) -> Partition:
     p_opt = kmeans_partitioning(db, m)
     modifications = phi_sub_optimal(p_opt, phi)
     s_partitions = s_kmeans_partitions(db, m)
@@ -112,3 +125,70 @@ def location_generalization(db: TrajectoryDatabase, m, phi, eps):
     partition = exponential_mechanism(partitions, utility_score, 1, eps)
 
     return partition
+
+
+def laplace_integral(a, b, eps):
+    return laplace_indefinite_integral(b, eps) - laplace_indefinite_integral(a, eps)
+
+
+def laplace_indefinite_integral(x, eps):
+    return -1 / 2 * math.exp(-x / eps) if x >= 0 else 1 / 2 * math.exp(x / eps)
+
+
+def draw_trajectory(
+    location_universe: list[Location], timestamps: set[datetime | int]
+) -> Trajectory:
+    st_points = []
+    for t in timestamps:
+        st_points.append(STPoint(t, secrets.choice(location_universe)))
+    return Trajectory(hash(tuple(st_points)), st_points)
+
+
+def dp_release(
+    db: TrajectoryDatabase, partition: Partition, eps: float
+) -> list[tuple[int, Trajectory]]:
+    query: Callable[[Partition], list[int]] = lambda x: [
+        len(x.labled_trajectories[l]) for l in x.labels
+    ]
+    noisy_counts = sorted(
+        laplace_mechanism(partition, query, sensitivity=1, eps=eps), reverse=True
+    )
+    noisy_counts = list(map(lambda x: max(x, 0), noisy_counts))
+
+    num_remaining_possible_traj = len(partition.location_universe()) ** db.length - len(
+        partition.mean_trajectories
+    )
+    num_i = {
+        (a, b): round(num_remaining_possible_traj * laplace_integral(a, b, eps))
+        for a, b in zip(noisy_counts[1:], noisy_counts[:-1])
+        if abs(a - b) > 1
+    }
+    release: list[tuple[int, Trajectory]] = []
+    acc_count = 0
+    for i, (c, l) in enumerate(zip(noisy_counts, partition.labels)):
+        noisy_count = min(db.size - acc_count, c)
+        release.append((noisy_count, partition.mean_trajectories[l]))
+        acc_count += noisy_count
+        if acc_count >= db.size:
+            break
+
+        if i + 1 >= len(noisy_counts):
+            continue
+        interval = (noisy_counts[i + 1], c)
+        if abs(interval[0] - interval[1]) == 0:
+            continue
+
+        num = num_i[interval]
+        while num > 0 and acc_count < db.size:
+            traj = draw_trajectory(partition.location_universe(), db.timestamps)
+            rand_noisy_count = min(
+                db.size - acc_count, random_int(interval[0], interval[1])
+            )
+            release.append((rand_noisy_count, traj))
+            num -= 1
+            acc_count += rand_noisy_count
+
+        if acc_count >= db.size:
+            break
+
+    return release

@@ -7,12 +7,14 @@ from pandas import DataFrame, read_csv
 
 from trajectory_clustering.cluster import Partition, kmeans_partitioning
 from trajectory_clustering.hua import (
-    location_generalization,
+    dp_location_generalization,
+    dp_release,
     phi_sub_optimal,
     phi_sub_optimal_inidividual,
     s_kmeans_partitions,
 )
 from trajectory_clustering.trajectory import (
+    Trajectory,
     TrajectoryDatabase,
     euclidean_distance,
 )
@@ -132,7 +134,20 @@ def test_s_kmeans_partitions(db):
 
 
 def test_location_generalization(db):
-    partition = location_generalization(db, int(max(2, db.size / 5)), 20, 0.1)
+    partition = dp_location_generalization(db, int(max(2, db.size / 5)), 20, 0.1)
 
     stepwise_plot(partition)
     print(partition)
+
+
+@pytest.fixture
+def generalized_locations(db):
+    return dp_location_generalization(db, int(max(2, db.size / 5)), phi=20, eps=1)
+
+
+def test_dp_release(db: TrajectoryDatabase, generalized_locations: Partition):
+    start = time.time()
+    release: list[tuple[int, Trajectory]] = dp_release(db, generalized_locations, 1)
+    end = time.time()
+    LOGGER.info(f"dp_release took: {end - start} seconds")
+    assert sum(n for n, _ in release) == db.size
