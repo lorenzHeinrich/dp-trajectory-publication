@@ -30,11 +30,11 @@ class Partition:
     def labels(self) -> list[int64]:
         return list(self.labled_trajectories.keys())
 
-    def location_universes_by_time(self) -> dict[datetime | int, list[Location]]:
-        universe: dict[datetime | int, list[Location]] = {}
+    def location_universes_by_time(self) -> dict[datetime | int, set[Location]]:
+        universe: dict[datetime | int, set[Location]] = {}
         for traj in self.mean_trajectories.values():
             for t, p in traj.st_points.items():
-                universe.setdefault(t, []).append(p.location)
+                universe.setdefault(t, set()).add(p.location)
         return universe
 
     def location_universe(self) -> list[Location]:

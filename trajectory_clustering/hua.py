@@ -1,7 +1,7 @@
 from datetime import datetime
 import math
 import secrets
-from typing import Callable, Iterable
+from typing import Callable
 from numpy import float64, floating, int64
 
 from trajectory_clustering.cluster import Partition, kmeans_partitioning
@@ -136,11 +136,12 @@ def laplace_indefinite_integral(x, eps):
 
 
 def draw_trajectory(
-    location_universe: list[Location], timestamps: set[datetime | int]
+    location_universe_by_time: dict[datetime | int, set[Location]],
+    timestamps: set[datetime | int],
 ) -> Trajectory:
     st_points = []
     for t in timestamps:
-        st_points.append(STPoint(t, secrets.choice(location_universe)))
+        st_points.append(STPoint(t, secrets.choice(list(location_universe_by_time[t]))))
     return Trajectory(hash(tuple(st_points)), st_points)
 
 
@@ -158,9 +159,13 @@ def make_noisy_counts(partition: Partition, eps: float):
 
 
 def num_is_by_intervals(
-    noisy_counts: list[int], partition, db, eps: float
+    location_universe: dict[datetime | int, set[Location]],
+    noisy_counts: list[int],
+    partition,
+    eps: float,
 ) -> dict[tuple[int, int], int]:
-    num_remaining_possible_traj = len(partition.location_universe()) ** db.length - len(
+    num_possible_trajectories = math.prod([len(l) for l in location_universe.values()])
+    num_remaining_possible_traj = num_possible_trajectories - len(
         partition.mean_trajectories
     )
     return {
@@ -175,7 +180,10 @@ def dp_release(
 ) -> list[tuple[int, Trajectory]]:
     # filter out non-positive counted trajectories
     noisy_counts = list(filter(lambda x: x[0] > 0, make_noisy_counts(partition, eps)))
-    num_is = num_is_by_intervals([c for c, _ in noisy_counts], partition, db, eps)
+    location_universe = partition.location_universes_by_time()
+    num_is = num_is_by_intervals(
+        location_universe, [c for c, _ in noisy_counts], partition, eps
+    )
 
     release: list[tuple[int, Trajectory]] = []
     acc_count = 0
@@ -194,7 +202,7 @@ def dp_release(
 
         num_i = num_is[interval]
         while num_i > 0 and acc_count < db.size:
-            traj = draw_trajectory(partition.location_universe(), db.timestamps)
+            traj = draw_trajectory(location_universe, db.timestamps)
             rand_noisy_count = min(
                 db.size - acc_count, random_int(interval[0], interval[1])
             )
@@ -209,7 +217,7 @@ def dp_release(
     if acc_count < db.size:
         smalest_noisy_count = noisy_counts[-1][0]
         while acc_count < db.size:
-            traj = draw_trajectory(partition.location_universe(), db.timestamps)
+            traj = draw_trajectory(location_universe, db.timestamps)
             rand_noisy_count = min(
                 db.size - acc_count, random_int(0, smalest_noisy_count)
             )

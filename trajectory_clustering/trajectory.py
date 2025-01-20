@@ -1,4 +1,5 @@
 from datetime import datetime
+import time
 from numpy import array, floating, shape
 from numpy.typing import NDArray
 from scipy import linalg
@@ -129,6 +130,7 @@ class TrajectoryDatabase:
     ):
         trajectories = []
         for key in df[id].unique():
+            start = time.time()
             traj_data = df[df[id] == key]
             st_points = [
                 STPoint(
@@ -138,5 +140,7 @@ class TrajectoryDatabase:
                 for _, row in traj_data.iterrows()
             ]
             trajectories.append(Trajectory(key, st_points))
+            end = time.time()
+            print(f"Trajectory {key} took {end - start} seconds")
 
         return TrajectoryDatabase(trajectories, set(df[timestamp]))
