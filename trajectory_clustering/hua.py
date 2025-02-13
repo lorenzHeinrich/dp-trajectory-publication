@@ -225,3 +225,11 @@ def dp_release(
             acc_count += rand_noisy_count
 
     return release
+
+
+def dp_hua(db: TrajectoryDatabase, eps: float, m: int, phi: int) -> TrajectoryDatabase:
+    dp_partition = dp_location_generalization(db, m, phi, eps)
+    release = dp_release(db, dp_partition, eps)
+
+    trajectories = [traj for count, traj in release for _ in range(count)]
+    return TrajectoryDatabase(db.timestamps, trajectories)

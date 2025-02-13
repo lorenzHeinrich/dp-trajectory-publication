@@ -1,5 +1,7 @@
 from datetime import datetime
 import time
+from turtle import st
+from typing import overload
 from numpy import array, floating, shape
 from numpy.typing import NDArray
 from scipy import linalg
@@ -75,16 +77,17 @@ class Trajectory:
     @classmethod
     def from_array(
         cls,
-        id: int,
         flat_locations: NDArray[floating],
-        timestamps: list[datetime | int],
+        timestamps: set[datetime | int],
+        id: int | None = None,
     ):
+        st_points = [
+            STPoint(t, Location(location[0], location[1]))
+            for t, location in zip(timestamps, flat_locations.reshape(-1, 2))
+        ]
         return Trajectory(
-            id=id,
-            st_points=[
-                STPoint(t, Location(location[0], location[1]))
-                for t, location in zip(timestamps, flat_locations.reshape(-1, 2))
-            ],
+            id=hash(tuple(st_points)) if id is None else id,
+            st_points=st_points,
         )
 
     def distance(self, other: "Trajectory"):
@@ -96,7 +99,7 @@ class Trajectory:
 
 class TrajectoryDatabase:
     def __init__(
-        self, trajectories: list[Trajectory], timestamps: set[datetime | int]
+        self, timestamps: set[datetime | int], trajectories: list[Trajectory] = []
     ) -> None:
         self.trajectories = dict((t.id, t) for t in trajectories)
         self.length = len(timestamps)
@@ -114,12 +117,17 @@ class TrajectoryDatabase:
         )
 
     def copy(self):
-        return TrajectoryDatabase(list(self.trajectories.values()), self.timestamps)
+        return TrajectoryDatabase(self.timestamps, list(self.trajectories.values()))
 
     def remove(self, id: int):
         del self.trajectories[id]
         self.size -= 1
         return self
+
+    def append(self, trajs: list[Trajectory]) -> None:
+        for traj in trajs:
+            self.trajectories[traj.id] = traj
+        self.size += len(trajs)
 
     def keys(self):
         return self.trajectories.keys()
@@ -130,7 +138,7 @@ class TrajectoryDatabase:
     ):
         trajectories = []
         for key in df[id].unique():
-            start = time.time()
+            # start = time.time()
             traj_data = df[df[id] == key]
             st_points = [
                 STPoint(
@@ -140,7 +148,7 @@ class TrajectoryDatabase:
                 for _, row in traj_data.iterrows()
             ]
             trajectories.append(Trajectory(key, st_points))
-            end = time.time()
-            print(f"Trajectory {key} took {end - start} seconds")
+            # end = time.time()
+            # print(f"Trajectory {key} took {end - start} seconds")
 
-        return TrajectoryDatabase(trajectories, set(df[timestamp]))
+        return TrajectoryDatabase(set(df[timestamp]), trajectories)

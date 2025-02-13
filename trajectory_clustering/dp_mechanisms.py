@@ -33,7 +33,7 @@ def choice(elements: list[R], probabilities: list[float]) -> R:
     raise ValueError("could not choose an element")
 
 
-def random_int(a, b):
+def random_int(a: int, b: int) -> int:
     """Return a random integer in the range (a, b]."""
     return secrets.randbelow(b - a) + a + 1
 

@@ -7,6 +7,7 @@ from pandas import DataFrame, read_csv
 
 from trajectory_clustering.cluster import Partition, kmeans_partitioning
 from trajectory_clustering.hua import (
+    dp_hua,
     dp_location_generalization,
     dp_release,
     phi_sub_optimal,
@@ -151,3 +152,11 @@ def test_dp_release(db: TrajectoryDatabase, generalized_locations: Partition):
     end = time.time()
     LOGGER.info(f"dp_release took: {end - start} seconds")
     assert sum(n for n, _ in release) == db.size
+
+
+def test_dp_hua(db):
+    start = time.time()
+    sanatized = dp_hua(db, 1.0, max(2, int(db.size / 5)), 20)
+    end = time.time()
+    LOGGER.info(f"dp_hua took: {end - start} seconds")
+    assert sanatized.size == db.size

@@ -71,7 +71,7 @@ class Partition:
         self.mean_trajectories[label] = Trajectory.from_array(
             id=self.mean_trajectories[label].id,
             flat_locations=mean_locations_arr,
-            timestamps=sorted(self.mean_trajectories[label].st_points.keys()),
+            timestamps=set(sorted(self.mean_trajectories[label].st_points.keys())),
         )
 
 

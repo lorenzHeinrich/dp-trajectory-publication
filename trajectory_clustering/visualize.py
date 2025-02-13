@@ -43,18 +43,41 @@ def animate_trajectories(data, interval=200, draw_line=False):
     )
 
 
-def plot_trajectories(data):
-    plt.figure(figsize=(15, 15))
-    plt.title("Trajectories")
-    plt.xlabel("Longitude")
-    plt.ylabel("Latitude")
+def trajectory_to_dataframe(trajectory):
+    return pd.DataFrame(
+        [
+            {
+                "id": trajectory.id,
+                "timestamp": p.timestamp,
+                "longitude": p.location.x,
+                "latitude": p.location.y,
+            }
+            for p in trajectory.st_points.values()
+        ]
+    )
+
+
+def get_trajectory_figure():
+    fig, ax = plt.subplots()
+    fig.set_size_inches(15, 15)
+    ax.set_title("Trajectories")
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    return fig, ax
+
+
+def plot_trajectories(traj, ax, color, label=None):
+    data = trajectory_to_dataframe(traj)
     for key in data["id"].unique():
         traj_data = data[data["id"] == key]
-        plt.plot(
-            traj_data["longitude"], traj_data["latitude"], label=f"Trajectory {key}"
+        ax.plot(
+            traj_data["longitude"],
+            traj_data["latitude"],
+            label=f"Trajectory {key if label == None else label}",
+            color=color,
         )
-    plt.legend()
-    return plt
+    ax.legend()
+    return ax
 
 
 def stepwise_plot(partition: Partition):
