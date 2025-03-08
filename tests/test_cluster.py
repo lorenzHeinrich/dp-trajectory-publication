@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from trajectory_clustering.cluster import kmeans_partitioning
+from trajectory_clustering.hua.cluster import kmeans_partitioning
 from trajectory_clustering.trajectory import TrajectoryDatabase
 
 

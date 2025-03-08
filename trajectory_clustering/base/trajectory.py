@@ -137,6 +137,7 @@ class TrajectoryDatabase:
         cls, df, id="id", timestamp="timestamp", x="longitude", y="latitude"
     ):
         trajectories = []
+        timestamps = set(df[timestamp])
         for key in df[id].unique():
             # start = time.time()
             traj_data = df[df[id] == key]
@@ -147,6 +148,9 @@ class TrajectoryDatabase:
                 )
                 for _, row in traj_data.iterrows()
             ]
+            assert len(st_points) == len(
+                timestamps
+            ), "Trajectory should have points for all timestamps"
             trajectories.append(Trajectory(key, st_points))
             # end = time.time()
             # print(f"Trajectory {key} took {end - start} seconds")

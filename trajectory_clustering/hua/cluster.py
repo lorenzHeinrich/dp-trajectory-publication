@@ -2,7 +2,7 @@ from datetime import datetime
 from numpy import array, int64, mean
 from sklearn.cluster import KMeans
 
-from trajectory_clustering.trajectory import (
+from trajectory_clustering.base.trajectory import (
     Location,
     STPoint,
     Trajectory,

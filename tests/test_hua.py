@@ -5,7 +5,7 @@ import pytest
 from numpy import array
 from pandas import DataFrame, read_csv
 
-from trajectory_clustering.cluster import Partition, kmeans_partitioning
+from trajectory_clustering.hua.cluster import Partition, kmeans_partitioning
 from trajectory_clustering.hua import (
     dp_hua,
     dp_location_generalization,
@@ -19,7 +19,6 @@ from trajectory_clustering.trajectory import (
     TrajectoryDatabase,
     euclidean_distance,
 )
-from trajectory_clustering.visualize import stepwise_plot
 
 LOGGER = logging.getLogger(__name__)
 
@@ -132,13 +131,6 @@ def test_s_kmeans_partitions(db):
 
     assert len(partitions) == db.size
     assert all(len(p.mean_trajectories) == m for p in partitions)
-
-
-def test_location_generalization(db):
-    partition = dp_location_generalization(db, int(max(2, db.size / 5)), 20, 0.1)
-
-    stepwise_plot(partition)
-    print(partition)
 
 
 @pytest.fixture

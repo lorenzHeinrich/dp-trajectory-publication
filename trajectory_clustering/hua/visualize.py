@@ -1,11 +1,12 @@
 import itertools
+from turtle import up
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import pandas as pd
 
-from trajectory_clustering.cluster import Partition, kmeans_partitioning
-from trajectory_clustering.trajectory import TrajectoryDatabase
+from trajectory_clustering.hua.cluster import Partition, kmeans_partitioning
+from trajectory_clustering.base.trajectory import Trajectory, TrajectoryDatabase
 
 
 # data: 'id', 'timestamp', 'longitude', 'latitude'
@@ -80,84 +81,82 @@ def plot_trajectories(traj, ax, color, label=None):
     return ax
 
 
-def stepwise_plot(partition: Partition):
+def stepwise_plot(
+    labels,
+    centers: dict[int, Trajectory],
+    clusters: dict[int, list[Trajectory]],
+    bounds: tuple[int, int],
+    show_timestamps=False,
+    draw_line=False,
+    cluster_marker_size=5,
+    label_marker_size=20,
+):
     fig, ax = plt.subplots()
     fig.set_size_inches(15, 15)
     ax.set_title("Stepwise Trajectories")
-    max_x, max_y = max(
-        [
-            (p.location.x, p.location.y)
-            for group in partition.labled_trajectories.values()
-            for traj in group.values()
-            for p in traj.st_points.values()
-        ]
-    )
+
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
 
-    colors = plt.cm.get_cmap("tab10", partition.n_labels)
+    colors = plt.cm.get_cmap("tab10", len(labels))
     step = [0]
 
     def update(step_label):
         ax.clear()
+        ax.set_xlim(bounds[0], bounds[1])
+        ax.set_ylim(bounds[0], bounds[1])
         ax.set_title(f"Group {step_label}")
         ax.set_xlabel("Longitude")
         ax.set_ylabel("Latitude")
-        ax.set_xlim(0, int(max_x) + 2)
-        ax.set_ylim(0, int(max_y) + 2)
 
-        group = partition.labled_trajectories[step_label]
-        for traj in group.values():
+        cluster = clusters[step_label]
+        for traj in cluster:
             x = [p.location.x for p in traj.st_points.values()]
             y = [p.location.y for p in traj.st_points.values()]
             timestamps = [p.timestamp for p in traj.st_points.values()]
-            ax.plot(x, y, color=colors(step_label))
-            ax.scatter(x, y, color=colors(step_label))
+            if draw_line:
+                ax.plot(x, y, color=colors(step_label))
+            ax.scatter(x, y, color=colors(step_label), s=cluster_marker_size)
 
-            offsets = itertools.cycle([(0, 10), (10, 0), (0, -10), (-10, 0)])
-            for i, txt in enumerate(timestamps):
-                offset = next(offsets)
-                ax.annotate(
-                    str(txt),
-                    (float(x[i]), float(y[i])),
-                    textcoords="offset points",
-                    xytext=offset,
-                    ha="center",
-                    fontsize=12,
-                )
+            if show_timestamps:
+                offsets = itertools.cycle([(0, 10), (10, 0), (0, -10), (-10, 0)])
+                for i, txt in enumerate(timestamps):
+                    offset = next(offsets)
+                    ax.annotate(
+                        str(txt),
+                        (float(x[i]), float(y[i])),
+                        textcoords="offset points",
+                        xytext=offset,
+                        ha="center",
+                        fontsize=12,
+                    )
 
-            x = [
-                p.location.x
-                for p in partition.mean_trajectories[step_label].st_points.values()
-            ]
-            y = [
-                p.location.y
-                for p in partition.mean_trajectories[step_label].st_points.values()
-            ]
-            ax.plot(x, y, color="black")
-            ax.scatter(x, y, color="black")
+        x = [p.location.x for p in centers[step_label].st_points.values()]
+        y = [p.location.y for p in centers[step_label].st_points.values()]
+        if draw_line:
+            ax.plot(x, y, color="red")
+        ax.scatter(x, y, color="red", marker="x", s=label_marker_size)
 
-            fig.canvas.draw_idle()
+        fig.canvas.draw_idle()
 
     def next_step(event):
-        step[0] = (step[0] + 1) % partition.n_labels
+        step[0] = (step[0] + 1) % len(labels)
+        update(step[0])
+
+    def prev_step(event):
+        step[0] = (step[0] - 1) % len(labels)
         update(step[0])
 
     update(step[0])
 
-    ax_button = plt.axes((0.8, 0.01, 0.1, 0.075))
-    button = Button(ax_button, "Next")
-    button.on_clicked(next_step)
+    # next
+    next_button = plt.axes((0.8, 0.01, 0.1, 0.075))
+    next_btn = Button(next_button, "Next")
+    next_btn.on_clicked(next_step)
+
+    # prev
+    prev_button = plt.axes((0.7, 0.01, 0.1, 0.075))
+    prev_btn = Button(prev_button, "Prev")
+    prev_btn.on_clicked(prev_step)
 
     plt.show()
-
-
-def main():
-    data = pd.read_csv("tests/data/fake-trajectories_4x5.csv")
-    db = TrajectoryDatabase.from_dataframe(data)
-    partition = kmeans_partitioning(db, 2)
-    stepwise_plot(partition)
-
-
-if __name__ == "__main__":
-    main()

@@ -1,6 +1,8 @@
 from datetime import datetime
+import logging
 import math
 from diffprivlib.mechanisms import Laplace
+from matplotlib.pylab import f
 import numpy as np
 
 from dpm.dpm import DPM
@@ -13,11 +15,33 @@ from trajectory_clustering.hua import (
 from trajectory_clustering.trajectory import Location, Trajectory, TrajectoryDatabase
 
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+
 def dpm_location_generalization(
-    eps: float, delta: float, db: TrajectoryDatabase, bounds: tuple[float, float]
+    db: TrajectoryDatabase,
+    eps: float,
+    delta: float,
+    bounds: tuple[float, float],
+    split_levels: int = 7,
+    t=0.3,
+    q=1 / 12,
+    w_c=1.0,
+    w_e=5.0,
 ) -> list[tuple[Trajectory, list[int]]]:
     data = np.array([traj.as_array() for traj in db.trajectories.values()])
     dpm = DPM(data, bounds, eps, delta)
+    dpm.num_split_levels = split_levels
+    dpm.t = t
+    dpm.q = q
+    dpm.w_c = w_c
+    dpm.w_e = w_e
 
     centers, clusters = dpm.perform_clustering()
 
@@ -29,6 +53,11 @@ def dpm_location_generalization(
         for center, cluster in zip(centers, clusters)
     ]
 
+    logger.info(
+        "Generalized {} clusters with average cluster size: {}".format(
+            len(generalized), np.mean([len(c) for _, c in generalized])
+        )
+    )
     return generalized
 
 

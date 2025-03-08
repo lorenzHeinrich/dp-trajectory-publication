@@ -4,13 +4,13 @@ import secrets
 from typing import Callable
 from numpy import float64, floating, int64
 
-from trajectory_clustering.cluster import Partition, kmeans_partitioning
-from trajectory_clustering.dp_mechanisms import (
+from trajectory_clustering.hua.cluster import Partition, kmeans_partitioning
+from trajectory_clustering.base.dp_mechanisms import (
     exponential_mechanism,
     laplace_mechanism,
     random_int,
 )
-from trajectory_clustering.trajectory import (
+from trajectory_clustering.base.trajectory import (
     Location,
     STPoint,
     Trajectory,
