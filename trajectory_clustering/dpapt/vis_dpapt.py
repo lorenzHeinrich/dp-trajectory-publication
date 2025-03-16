@@ -87,27 +87,32 @@ def vis_D_cells(traj_san, ax):
         ax.plot(centers[:, 0], centers[:, 1], "-")
 
 
-# traj_len = 10
-# D = np.array(
-#     [
-#         [
-#             [np.random.uniform(0, 100), np.random.uniform(0, 100)]
-#             for _ in range(traj_len)
-#         ]
-#         for _ in range(500)
-#     ]
-# )
-# x_range = (0, 100)
-# y_range = (0, 100)
+def test_vis_D():
+    traj_len = 5
+    D = np.array(
+        [
+            [
+                [np.random.uniform(0, 100), np.random.uniform(0, 100)]
+                for _ in range(traj_len)
+            ]
+            for _ in range(10000)
+        ]
+    )
+    x_range = (0, 100)
+    y_range = (0, 100)
 
-# fig, ax = plt.subplots(1, 2, figsize=(10, 10))
-# for a in ax:
-#     a.set_aspect("equal", "box")
-# vis_D(D, ax[0])
+    fig, ax = plt.subplots(1, 2, figsize=(10, 10))
+    for a in ax:
+        a.set_aspect("equal", "box")
+    vis_D(D, ax[0])
 
-# traj_san, counts = dpapt(
-#     D, (0, traj_len - 1), (x_range, y_range), eps=4, alpha=0.5, randomize=False
-# )
+    traj_san, counts = dpapt(
+        D, (0, traj_len - 1), (x_range, y_range), eps=0.5, alpha=0.5, randomize=True
+    )
 
-# vis_D_cells(traj_san, ax[1])
-# plt.show()
+    vis_D_cells(traj_san, ax[1])
+    plt.show()
+
+
+if __name__ == "__main__":
+    test_vis_D()
