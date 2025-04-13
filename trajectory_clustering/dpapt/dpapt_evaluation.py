@@ -27,6 +27,7 @@ def dpapt_experiment(
     c1=10,
     thresh_grid=thresh_std_var,
     thresh_traj=thresh_std_var,
+    randomize=True,
     measures=[normalized_hausdorff],
 ):
 
@@ -40,8 +41,9 @@ def dpapt_experiment(
         eps=eps,
         alpha=alpha,
         c1=c1,
-        thresh_grid=thresh_std_var,
-        thresh_traj=thresh_std_var,
+        thresh_grid=thresh_grid,
+        thresh_traj=thresh_traj,
+        randomize=randomize,
     )
     D_post = dpapt.post_process_centroid(D_cell)
 
@@ -74,7 +76,7 @@ def plot_results(x, y, title, x_label, y_label, label, marker, colors, line, ax)
 
 
 def time_intervals(
-    D, min_t, max_t, epsilons=[0.5, 1, 2, 4], alpha=0.5, c1=10, ax=None, eps_colors=None
+    D, min_t, max_t, epsilons=[2, 3, 4], alpha=0.5, c1=10, ax=None, eps_colors=None
 ):
     time_intervals = list(range(min_t, max_t + 1))
 
@@ -91,7 +93,14 @@ def time_intervals(
             t_interval = (0, t)
 
             result = dpapt_experiment(
-                D, t_interval, eps, alpha, c1, [normalized_hausdorff]
+                D,
+                t_interval,
+                eps,
+                alpha,
+                c1,
+                thresh_grid=thresh_std_var,
+                thresh_traj=thresh_std_var,
+                measures=[normalized_hausdorff],
             )
 
             results[i, j] = result[0]
@@ -226,7 +235,7 @@ def D_taxis(m, n):
     return D[:n, :m]
 
 
-def benchmark_size(D, t_interval, epsilons=[1, 2, 3], c1=10, axs=None):
+def benchmark_size(D, t_interval, epsilons=[1, 2, 3], c1=10, randomize=True, axs=None):
     sizes = np.arange(len(D) // 5, len(D), len(D) // 5)
     times = np.zeros((len(epsilons), len(sizes)))
     for i, eps in enumerate(epsilons):
@@ -241,7 +250,8 @@ def benchmark_size(D, t_interval, epsilons=[1, 2, 3], c1=10, axs=None):
                 c1,
                 thresh_traj=thresh_var,
                 thresh_grid=thresh_var,
-                measures=[normalized_hausdorff],
+                randomize=randomize,
+                measures=[],
             )
             times[i, j] = time()
             print(f"Benchmark with ε={eps}, n={n}: {times[i, j] - start:.2f} s")
@@ -259,8 +269,8 @@ def benchmark_size(D, t_interval, epsilons=[1, 2, 3], c1=10, axs=None):
     )
 
 
-def benchmark_interval(D, epsilons=[1, 2, 3], c1=10, axs=None):
-    intervals = [(0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5)]
+def benchmark_interval(D, epsilons=[0.5, 1, 2], c1=10, axs=None):
+    intervals = [(0, 0), (0, 1), (0, 2), (0, 3), (0, 4)]
     times = np.zeros((len(epsilons), len(intervals)))
     for i, eps in enumerate(epsilons):
         for j, t in enumerate(intervals):
@@ -273,9 +283,9 @@ def benchmark_interval(D, epsilons=[1, 2, 3], c1=10, axs=None):
                 c1,
                 thresh_traj=thresh_var,
                 thresh_grid=thresh_var,
-                measures=[normalized_hausdorff],
+                measures=[],
             )
-            times[i, j] = time()
+            times[i, j] = time() - start
             print(f"Benchmark with ε={eps}, t={t}: {times[i, j] - start:.2f} s")
     plot_results(
         intervals,
@@ -292,11 +302,11 @@ def benchmark_interval(D, epsilons=[1, 2, 3], c1=10, axs=None):
 
 
 if __name__ == "__main__":
-    # eval_taxis()
-    # eval_gowalla()
+    eval_taxis()
+    # # eval_gowalla()
     # sanity_check()
-    D = D_gowalla(7, 10000)
+    D = D_gowalla(7, 20000)
     _, axs = plt.subplots(1, 1)
-    # benchmark_size(D, (0, 2), axs=axs)
-    benchmark_interval(D, axs=axs)
+    benchmark_size(D, (0, 4), randomize=True, axs=axs)
+    # benchmark_interval(D, axs=axs)
     plt.show()

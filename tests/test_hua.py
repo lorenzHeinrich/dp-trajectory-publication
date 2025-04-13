@@ -2,33 +2,14 @@ import logging
 import math
 import time
 import pytest
-from numpy import array
 from pandas import DataFrame, read_csv
+from sklearn.cluster import KMeans
 
-from trajectory_clustering.hua.cluster import Partition, kmeans_partitioning
-from trajectory_clustering.hua import (
-    dp_hua,
-    dp_location_generalization,
-    dp_release,
-    phi_sub_optimal,
-    phi_sub_optimal_inidividual,
-    s_kmeans_partitions,
-)
-from trajectory_clustering.trajectory import (
-    Trajectory,
-    TrajectoryDatabase,
-    euclidean_distance,
-)
+
+from trajectory_clustering.data.read_db import csv_db_to_numpy
+from trajectory_clustering.hua.hua import Hua
 
 LOGGER = logging.getLogger(__name__)
-
-
-def test_euclidean_distance():
-    x = array([0, 0])
-    y = array([3, 4])
-    assert euclidean_distance(x, y) == 5
-    assert euclidean_distance(x, x) == 0
-    assert euclidean_distance(x, y) == euclidean_distance(y, x)
 
 
 @pytest.fixture(params=["4x5", "20x5", "500x5"])
@@ -39,26 +20,25 @@ def df(request) -> DataFrame:
 
 
 @pytest.fixture
-def db(df) -> TrajectoryDatabase:
-    return TrajectoryDatabase.from_dataframe(df)
+def D(df):
+    return csv_db_to_numpy(df)
 
 
 @pytest.fixture
-def partition(db) -> Partition:
-    n_clusters = max(2, round(db.size / 4))
-    return kmeans_partitioning(db, n_clusters)
+def p_opt(D) -> KMeans:
+    n_clusters = max(2, round(D.shape[0] / 4))
+    return KMeans(n_clusters=n_clusters).fit(D)
 
 
-def test_phi_sub_optimal_inidividual(db, partition):
-
-    expected_size = min(db.size * (partition.n_labels - 1), 1000)
+def test_phi_sub_optimal_inidividual(D, p_opt):
+    labels, centers = p_opt.labels_, p_opt.cluster_centers_
+    expected_size = min(D.shape[0] * (p_opt.n_clusters - 1), 1000)
+    hua = Hua(1, expected_size, 1)
     start = time.time()
-    result = phi_sub_optimal_inidividual(
-        partition,
-        expected_size,
-    )
+    result = hua._phi_sub_optimal_individual(D, (labels, centers))
     end = time.time()
-    LOGGER.info(f"phi_sub_optimal_inidividual took: {round(end - start, 3)} seconds")
+    LOGGER.info(f"phi_sub_optimal_individual_np took: {round(end - start, 3)} seconds")
+
     pairs = [
         (result[i], result[j])
         for i in range(len(result))
@@ -75,24 +55,23 @@ def test_phi_sub_optimal_inidividual(db, partition):
     )
 
 
-def test_phi_sub_optimal(db, partition):
+def test_phi_sub_optimal(D, p_opt):
+    labels, centers = p_opt.labels_, p_opt.cluster_centers_
     expected_size = (
         1000
-        if db.size > 10
+        if D.shape[0] > 10
         else int(
             sum(
                 [
-                    math.comb(db.size, i) * math.pow(partition.n_labels - 1, i)
-                    for i in range(1, db.size + 1)
+                    math.comb(D.shape[0], i) * math.pow(len(centers) - 1, i)
+                    for i in range(1, D.shape[0] + 1)
                 ]
             )
         )
     )
+    hua = Hua(1, expected_size, 1)
     start = time.time()
-    result = phi_sub_optimal(
-        partition,
-        expected_size,
-    )
+    result = hua._phi_sub_optimal(D, (labels, centers))
     end = time.time()
     LOGGER.info(f"phi_sub_optimal took: {end - start} seconds")
     # no repeated modifications of individual points in a modification
@@ -124,31 +103,45 @@ def test_phi_sub_optimal(db, partition):
     )
 
 
-@pytest.mark.parametrize("db", ["500x5"], indirect=True)
-def test_s_kmeans_partitions(db):
-    m = int(db.size / max(2, db.size / 4))
-    partitions = s_kmeans_partitions(db, m)
+@pytest.mark.parametrize("D", ["500x5"], indirect=True)
+def test_s_kmeans_partitions(D):
+    m = int(D.shape[0] / max(2, D.shape[0] / 4))
+    hua = Hua(m, 1, 1)
+    partitions = hua._s_kmeans_partitions(D)
 
-    assert len(partitions) == db.size
-    assert all(len(p.mean_trajectories) == m for p in partitions)
+    assert len(partitions) == D.shape[0]
+    assert all(len(centers) == m for ((_, centers), _) in partitions)
 
 
 @pytest.fixture
-def generalized_locations(db):
-    return dp_location_generalization(db, int(max(2, db.size / 5)), phi=20, eps=1)
+def generalized_locations(D):
+    hua = Hua(m=int(max(2, D.shape[0] / 5)), phi=20, eps=1)
+    return hua._dp_location_generalization(D)
 
 
-def test_dp_release(db: TrajectoryDatabase, generalized_locations: Partition):
+def test_dp_location_generalization(D):
+    m = int(max(2, D.shape[0] / 5))
+    hua = Hua(m, phi=20, eps=1)
     start = time.time()
-    release: list[tuple[int, Trajectory]] = dp_release(db, generalized_locations, 1)
+    generalized_locations = hua._dp_location_generalization(D)
+    end = time.time()
+    LOGGER.info(f"dp_location_generalization took: {end - start} seconds")
+    assert len(generalized_locations) == m
+
+
+def test_dp_release(D, generalized_locations):
+    hua = Hua(m=int(max(2, D.shape[0] / 5)), phi=20, eps=1)
+    start = time.time()
+    trajects, counts = hua._dp_release(D, generalized_locations)
     end = time.time()
     LOGGER.info(f"dp_release took: {end - start} seconds")
-    assert sum(n for n, _ in release) == db.size
 
 
-def test_dp_hua(db):
+def test_dp_hua(D):
+    m = int(max(2, D.shape[0] / 5))
+    hua = Hua(m, phi=20, eps=1)
     start = time.time()
-    sanatized = dp_hua(db, 1.0, max(2, int(db.size / 5)), 20)
+    _, counts = hua.publish(D)
     end = time.time()
     LOGGER.info(f"dp_hua took: {end - start} seconds")
-    assert sanatized.size == db.size
+    assert sum(counts) >= m

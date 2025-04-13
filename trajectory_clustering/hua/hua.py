@@ -1,21 +1,8 @@
-from datetime import datetime
-import math
 import secrets
-from typing import Callable
+import numpy as np
 from numpy import float64, floating, int64
-
-from trajectory_clustering.hua.cluster import Partition, kmeans_partitioning
-from trajectory_clustering.base.dp_mechanisms import (
-    exponential_mechanism,
-    laplace_mechanism,
-    random_int,
-)
-from trajectory_clustering.base.trajectory import (
-    Location,
-    STPoint,
-    Trajectory,
-    TrajectoryDatabase,
-)
+from sklearn.cluster import KMeans
+from diffprivlib.mechanisms import Exponential, Laplace
 
 
 class Modification:
@@ -45,191 +32,196 @@ class Modification:
         return f"Modification({self.id!r}, {self.from_cluster!r}, {self.to_cluster!r} {self.distance!r})"
 
 
-def phi_sub_optimal_inidividual(
-    p_opt: Partition,
-    phi: int,
-) -> list[Modification]:
-    modifications: list[Modification] = []
+class Hua:
+    def __init__(self, m, phi, eps):
+        self.m = m
+        self.phi = phi
+        self.eps1 = eps / 2
+        self.eps2 = eps - self.eps1
 
-    for l, group in p_opt.labled_trajectories.items():
-        for id, traj in group.items():
-            dis_opt = traj.distance(p_opt.mean_trajectories[l])
-            for l_ in p_opt.labled_trajectories.keys() - {l}:
-                dis_mod = traj.distance(p_opt.mean_trajectories[l_])
-                modifications.append(Modification(id, l, l_, dis_mod - dis_opt))
+    def publish(self, D: np.ndarray):
+        generalized = self._dp_location_generalization(D)
+        release = self._dp_release(D, generalized)
 
-    return sorted(modifications, key=lambda x: float(x.distance))[0:phi]
+        return release
 
+    def _dp_location_generalization(self, D: np.ndarray):
+        kmeans = KMeans(n_clusters=self.m).fit(D)
+        p_opt = (kmeans.labels_, kmeans.cluster_centers_)
+        modifications = self._phi_sub_optimal(D, p_opt)
+        s_partitions = self._s_kmeans_partitions(D)
 
-def phi_sub_optimal(
-    p_opt: Partition,
-    phi: int,
-) -> list[list[Modification]]:
-    indiv_mods = phi_sub_optimal_inidividual(p_opt, phi)
-    result = [[indiv_mods[0]]]
+        p_opt_modifications = self.apply_modifications(D, p_opt, modifications)
 
-    for indiv_mod in indiv_mods[1:]:
-        tmp = [[indiv_mod]]
+        partitions = p_opt_modifications + [(p_opt, lambda D: D)] + s_partitions
 
-        for mod in result:
-            if not any(indiv_mod.id == m.id for m in mod):
-                new_mod = mod.copy() + [indiv_mod]
-                tmp.append(new_mod)
+        p_opt_mean_dist = self._mean_distance(D, p_opt)
+        utility_score = lambda x: p_opt_mean_dist / self._mean_distance(
+            x[1](D), x[0]
+        )  # x.mean_distance() may be zero, but highly unlikely for real-world data
 
-        result += tmp
-        result.sort(key=lambda x: sum(float(m.distance) for m in x))
-        if len(result) > phi:
-            result = result[0:phi]
-    return result
+        utilities = [utility_score(p) for p in partitions]
+        exp = Exponential(
+            epsilon=self.eps1, sensitivity=1, utility=utilities, candidates=partitions
+        )
+        ((_, centers), _) = exp.randomise()  # type: ignore
 
+        return centers
 
-def s_kmeans_partitions(db: TrajectoryDatabase, m: int) -> list[Partition]:
-    partitions = []
-    for id in db.keys():
-        db_ = db.copy().remove(id)
-        partitions.append(kmeans_partitioning(db_, m))
-    return partitions
+    def _dp_release(self, D: np.ndarray, generalized: np.ndarray):
 
+        # filter out non-positive counted trajectories
+        noisy_counts = list(
+            filter(lambda c: c > 0, self._make_noisy_counts(D, generalized))
+        )
 
-def mean_distance(partition: Partition) -> float:
-    sum = 0
-    for l, group in partition.labled_trajectories.items():
-        group_sum = 0
-        for traj in group.values():
-            group_sum += traj.distance(partition.mean_trajectories[l])
-        sum += group_sum / len(group) if len(group) > 0 else 0
-    return float(sum / partition.n_labels)
+        universes = self._location_universes(generalized)
+        size_omega = np.prod([u.shape[0] for u in universes])
+        size_remaining_omega = size_omega - generalized.shape[0]
+        total_count = 0
+        release_trajects = []
+        release_counts = []
+        for i, (ci, cj) in enumerate(zip(noisy_counts[:-1], noisy_counts[1:])):
+            # f(x, b) = 1/(2b) e^(-x/b)
+            # using b = ε:
+            # f(x, ε) = 1/(2ε) e^(-x/ε)
+            # ∫ 1/(2ε) e^(-x/ε) dx = -1/2 e^(-x/ε)
+            # using b = 1/ε:
+            # f(x, 1/ε) = 1/2 ε e^(-xε)
+            # ∫ 1/2 ε e^(-x ε) dx = -1/2 e^(-xε)
+            antiderivative = lambda x: -1 / 2 * np.exp(-x / self.eps2)
+            integral = lambda a, b: antiderivative(b) - antiderivative(a)
 
+            # num_i = |Ω - D'| * ∫_{c_j}^{c_i} f(x, ε)
+            num_i = int(np.round(size_remaining_omega * integral(cj, ci)))
 
-def dp_location_generalization(db: TrajectoryDatabase, m, phi, eps) -> Partition:
-    p_opt = kmeans_partitioning(db, m)
-    modifications = phi_sub_optimal(p_opt, phi)
-    s_partitions = s_kmeans_partitions(db, m)
+            if num_i > 0:
+                rand_trajects = np.array(
+                    [self._draw_trajectory(universes) for _ in range(num_i)]
+                )
+                rand_counts = secrets.randbelow(ci - cj) + cj
 
-    p_opt_modified = []
-    for mods in modifications:
-        p_opt_ = p_opt.copy()
+                release_trajects.append(rand_trajects)
+                release_counts.append(rand_counts)
+                total_count += num_i + rand_counts
+
+            release_trajects.append(generalized[i])
+            release_counts.append(noisy_counts[i])
+            total_count += noisy_counts[i]
+
+            if total_count >= D.shape[0]:
+                break
+
+        return release_trajects, release_counts
+
+    def _phi_sub_optimal(self, D: np.ndarray, p_opt) -> list[list[Modification]]:
+        indiv_mods = self._phi_sub_optimal_individual(D, p_opt)
+        result = [[indiv_mods[0]]]
+
+        for indiv_mod in indiv_mods[1:]:
+            tmp = [[indiv_mod]]
+
+            for mod in result:
+                if not any(indiv_mod.id == m.id for m in mod):
+                    new_mod = mod.copy() + [indiv_mod]
+                    tmp.append(new_mod)
+
+            result += tmp
+            result.sort(key=lambda x: sum(float(m.distance) for m in x))
+            if len(result) > self.phi:
+                result = result[0 : self.phi]
+
+        return result
+
+    def _phi_sub_optimal_individual(self, D: np.ndarray, p_opt) -> list[Modification]:
+        labels, centers = p_opt
+        modifications: list[Modification] = []
+        for i, traj in enumerate(D):
+            label = labels[i]
+            dis_opt = np.linalg.norm(traj - centers[label])
+
+            # move to other clusters and calculate distance change
+            for k in set(labels) - {label}:
+                dis = np.linalg.norm(traj - centers[k])
+                modifications.append(Modification(i, label, k, dis - dis_opt))
+
+        return sorted(modifications, key=lambda x: float(x.distance))[0 : self.phi]
+
+    def _s_kmeans_partitions(self, D: np.ndarray):
+        partitions = []
+        for id in range(D.shape[0]):
+            D_ = np.delete(D, id, axis=0)
+            p = KMeans(n_clusters=self.m).fit(D_)
+            partitions.append(
+                ((p.labels_, p.cluster_centers_), lambda D: np.delete(D, id, axis=0))
+            )
+        return partitions
+
+    def _mean_distance(self, D: np.ndarray, p) -> float:
+        # MeanDist(p) = 1 / (m * |D_{LS_k^p}|) * sum_{k=1}^m sum_{traj in D_{LS_k^p}} || traj - c_k^p ||
+        # where c_k^p is the mean trajectory of cluster k in partition p
+        # and D_{LS_k^p} is the set of trajectories in cluster k in partition p
+        labels, centers = p
+        m = len(centers)
+        sum = 0
+        for k in range(m):
+            group = D[labels == k]
+            if len(group) > 0:
+                group_sum = np.sum(np.linalg.norm(group - centers[k], axis=1))
+                sum += group_sum / len(group)
+        return float(sum / m)
+
+    def apply_modifications(self, D: np.ndarray, p_opt, mods: list[list[Modification]]):
+        partitions = []
+        opt_labels, opt_centers = p_opt
         for mod in mods:
-            p_opt_.move(
-                mod.id, mod.from_cluster, mod.to_cluster
-            )  # move with recalcualtion of mean, not clear in the paper
-        p_opt_modified.append(p_opt_)
+            labels = opt_labels.copy()
+            centers = opt_centers.copy()
+            for m in mod:
+                labels[m.id] = m.to_cluster
 
-    partitions = p_opt_modified + [p_opt] + s_partitions
-
-    p_opt_mean_dist = mean_distance(p_opt)
-    utility_score = lambda x: p_opt_mean_dist / mean_distance(
-        x
-    )  # x.mean_distance() may be zero, but highly unlikely for real-world data
-
-    partition = exponential_mechanism(partitions, utility_score, 1, eps)
-
-    return partition
-
-
-def laplace_integral(a, b, eps):
-    return laplace_indefinite_integral(b, eps) - laplace_indefinite_integral(a, eps)
-
-
-def laplace_indefinite_integral(x, eps):
-    return -1 / 2 * math.exp(-x / eps) if x >= 0 else 1 / 2 * math.exp(x / eps)
-
-
-def draw_trajectory(
-    location_universe_by_time: dict[datetime | int, set[Location]],
-    timestamps: set[datetime | int],
-) -> Trajectory:
-    st_points = []
-    for t in timestamps:
-        st_points.append(STPoint(t, secrets.choice(list(location_universe_by_time[t]))))
-    return Trajectory(hash(tuple(st_points)), st_points)
-
-
-def make_noisy_counts(partition: Partition, eps: float):
-    query: Callable[[Partition], list[int]] = lambda x: [
-        len(x.labled_trajectories[l]) for l in x.labels
-    ]
-    return zip(
-        sorted(
-            laplace_mechanism(partition, query, sensitivity=1, eps=eps),
-            reverse=True,
-        ),
-        partition.labels,
-    )
-
-
-def num_is_by_intervals(
-    location_universe: dict[datetime | int, set[Location]],
-    noisy_counts: list[int],
-    partition,
-    eps: float,
-) -> dict[tuple[int, int], int]:
-    num_possible_trajectories = math.prod([len(l) for l in location_universe.values()])
-    num_remaining_possible_traj = num_possible_trajectories - len(
-        partition.mean_trajectories
-    )
-    return {
-        (a, b): round(num_remaining_possible_traj * laplace_integral(a, b, eps))
-        for a, b in zip(noisy_counts[1:], noisy_counts[:-1])
-        if abs(a - b) > 1
-    }
-
-
-def dp_release(
-    db: TrajectoryDatabase, partition: Partition, eps: float
-) -> list[tuple[int, Trajectory]]:
-    # filter out non-positive counted trajectories
-    noisy_counts = list(filter(lambda x: x[0] > 0, make_noisy_counts(partition, eps)))
-    location_universe = partition.location_universes_by_time()
-    num_is = num_is_by_intervals(
-        location_universe, [c for c, _ in noisy_counts], partition, eps
-    )
-
-    release: list[tuple[int, Trajectory]] = []
-    acc_count = 0
-    for i, (c, l) in enumerate(noisy_counts):
-        noisy_count = min(db.size - acc_count, c)
-        release.append((noisy_count, partition.mean_trajectories[l]))
-        acc_count += noisy_count
-        if acc_count >= db.size:
-            break
-
-        if i + 1 >= len(noisy_counts):
-            continue
-        interval = (noisy_counts[i + 1][0], c)
-        if abs(interval[0] - interval[1]) <= 1:
-            continue
-
-        num_i = num_is[interval]
-        while num_i > 0 and acc_count < db.size:
-            traj = draw_trajectory(location_universe, db.timestamps)
-            rand_noisy_count = min(
-                db.size - acc_count, random_int(interval[0], interval[1])
+            # recalculate mean - not clear from the paper
+            centers = np.array(
+                [
+                    (
+                        np.mean(D[labels == i], axis=0)
+                        if len(D[labels == i]) > 0
+                        else np.zeros(D.shape[1])
+                    )
+                    for i in range(len(centers))
+                ]
             )
-            release.append((rand_noisy_count, traj))
-            num_i -= 1
-            acc_count += rand_noisy_count
+            partitions.append(((labels, centers), lambda D: D))
+        return partitions
 
-        if acc_count >= db.size:
-            break
+    def _draw_trajectory(self, universes: np.ndarray):
+        traj = np.empty((universes.shape[0], 2))
+        for t in range(universes.shape[0]):
+            traj[t] = secrets.choice(universes[t])
+        return traj.flatten()
 
-    # if we still have not enough trajectories, fill up with noisy trajectories
-    if acc_count < db.size:
-        smalest_noisy_count = noisy_counts[-1][0]
-        while acc_count < db.size:
-            traj = draw_trajectory(location_universe, db.timestamps)
-            rand_noisy_count = min(
-                db.size - acc_count, random_int(0, smalest_noisy_count)
-            )
-            release.append((rand_noisy_count, traj))
-            acc_count += rand_noisy_count
+    def _make_noisy_counts(self, D: np.ndarray, generalized: np.ndarray):
+        # calculate for each tr in D the distance to each center
+        centers = generalized
+        distances = np.linalg.norm(D[:, np.newaxis] - centers, axis=2)
+        # for each center, get the closest trajectory
+        closest = np.argmin(distances, axis=1)
+        # for each center, count how many trajectories are closest to it
+        counts = np.bincount(closest, minlength=centers.shape[0])
+        # add Laplace noise
+        lap = Laplace(epsilon=self.eps2, sensitivity=1)
+        noisy_counts = [lap.randomise(c) for c in counts]
 
-    return release
+        # noisy counts should be discrete, the paper does not mention this
+        # we round to the nearest integer here
+        noisy_counts_discrete = [int(np.round(c)) for c in noisy_counts]
+        return sorted(noisy_counts_discrete, reverse=True)
 
-
-def dp_hua(db: TrajectoryDatabase, eps: float, m: int, phi: int) -> TrajectoryDatabase:
-    dp_partition = dp_location_generalization(db, m, phi, eps)
-    release = dp_release(db, dp_partition, eps)
-
-    trajectories = [traj for count, traj in release for _ in range(count)]
-    return TrajectoryDatabase(db.timestamps, trajectories)
+    def _location_universes(self, generalized: np.ndarray):
+        tuple_shaped = generalized.reshape(generalized.shape[0], -1, 2)
+        traj_len = tuple_shaped.shape[1]
+        universes = np.empty((traj_len,), dtype=object)
+        for t in range(traj_len):
+            tuples_t = tuple_shaped[:, t]
+            universes[t] = np.unique(tuples_t, axis=0)
+        return universes

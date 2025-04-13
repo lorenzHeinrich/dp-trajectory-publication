@@ -58,18 +58,19 @@ def dpapt(
     logging.info(
         f"Processing t_interval={t_interval} with {len(cells)} cells and {len(trajects_prev)} previous trajectories"
     )
-    start = time()
-    D_traj_prev = traverses(D, trajects_prev)
-    logging.info(f"Building lookup table took {time() - start:.2f}s")
 
     trajects_prev_len = len(trajects_prev)
     cells_len = len(cells)
     counts_len = cells_len * trajects_prev_len
     counts_true = np.empty(counts_len)
     counts_rand = np.empty(counts_len)
-    offsets = np.arange(trajects_prev_len) * cells_len
 
     start = time()
+    D_traj_prev = traverses(D, trajects_prev)
+    logging.info(f"Building lookup table took {time() - start:.2f}s")
+
+    start = time()
+    offsets = np.arange(trajects_prev_len) * cells_len
     for offset, D_prev in zip(offsets, D_traj_prev):
         counts = counts_inside(D_prev, t_u, cells)
         counts_true[offset : offset + cells_len] = counts
@@ -107,7 +108,8 @@ def dpapt(
     logging.info(
         f"Returning {len(trajects_new)} trajectories, with counts summing to {np.sum(counts_valid)}",
     )
-    return np.array(trajects_new), np.array(counts_valid)
+
+    return (np.array(trajects_new), np.array(counts_valid))
 
 
 def inside_mask(D, t, cell):

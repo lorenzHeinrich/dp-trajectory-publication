@@ -7,12 +7,16 @@ import numpy as np
 
 from dpm.dpm import DPM
 import pandas as pd
-from trajectory_clustering.dp_mechanisms import random_int
-from trajectory_clustering.hua import (
+from trajectory_clustering.base.dp_mechanisms import random_int
+from trajectory_clustering.hua.hua import (
     draw_trajectory,
     laplace_integral,
 )
-from trajectory_clustering.trajectory import Location, Trajectory, TrajectoryDatabase
+from trajectory_clustering.base.trajectory import (
+    Location,
+    Trajectory,
+    TrajectoryDatabase,
+)
 
 
 logger = logging.getLogger(__name__)
