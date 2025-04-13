@@ -79,7 +79,7 @@ class Hua:
         size_omega = np.prod([u.shape[0] for u in universes])
         size_remaining_omega = size_omega - generalized.shape[0]
         total_count = 0
-        release_trajects = []
+        release_trajects = np.empty((0, generalized.shape[1]))
         release_counts = []
         for i, (ci, cj) in enumerate(zip(noisy_counts[:-1], noisy_counts[1:])):
             # f(x, b) = 1/(2b) e^(-x/b)
@@ -101,11 +101,11 @@ class Hua:
                 )
                 rand_counts = secrets.randbelow(ci - cj) + cj
 
-                release_trajects.append(rand_trajects)
+                release_trajects = np.concatenate((release_trajects, rand_trajects))
                 release_counts.append(rand_counts)
                 total_count += num_i + rand_counts
 
-            release_trajects.append(generalized[i])
+            release_trajects = np.concatenate((release_trajects, [generalized[i]]))
             release_counts.append(noisy_counts[i])
             total_count += noisy_counts[i]
 
