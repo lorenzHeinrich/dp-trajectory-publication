@@ -5,9 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import pandas as pd
 
-from trajectory_clustering.hua.cluster import Partition, kmeans_partitioning
-from trajectory_clustering.base.trajectory import Trajectory, TrajectoryDatabase
-
 
 # data: 'id', 'timestamp', 'longitude', 'latitude'
 def animate_trajectories(data, interval=200, draw_line=False):
@@ -83,8 +80,8 @@ def plot_trajectories(traj, ax, color, label=None):
 
 def stepwise_plot(
     labels,
-    centers: dict[int, Trajectory],
-    clusters: dict[int, list[Trajectory]],
+    centers,
+    clusters,
     bounds: tuple[int, int],
     show_timestamps=False,
     draw_line=False,

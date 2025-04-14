@@ -10,4 +10,4 @@ def csv_db_to_numpy(df: pd.DataFrame):
     for idx, (_, group) in enumerate(df.groupby("id")):
         group = group[["longitude", "latitude"]].to_numpy()
         D[idx] = group.flatten()
-    return D
+    return D.reshape(n, len, 2)

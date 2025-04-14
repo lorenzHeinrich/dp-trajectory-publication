@@ -40,10 +40,11 @@ class Hua:
         self.eps2 = eps - self.eps1
 
     def publish(self, D: np.ndarray):
+        D = D.reshape(D.shape[0], -1)
         generalized = self._dp_location_generalization(D)
-        release = self._dp_release(D, generalized)
+        trajects, counts = self._dp_release(D, generalized)
 
-        return release
+        return trajects.reshape((trajects.shape[0], -1, 2)), counts
 
     def _dp_location_generalization(self, D: np.ndarray):
         kmeans = KMeans(n_clusters=self.m).fit(D)

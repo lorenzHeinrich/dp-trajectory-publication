@@ -4,8 +4,6 @@ from matplotlib.patches import Rectangle
 import numpy as np
 import sklearn.datasets
 
-from trajectory_clustering.dpapt.dpapt import adaptive_noisy_grid, dpapt
-
 
 def visualize_grid(data, bounds, L2Grids, ax: Axes):
     ax.set_aspect("equal", "box")
@@ -46,27 +44,27 @@ def visualize_grid(data, bounds, L2Grids, ax: Axes):
             )
 
 
-def vis_data(D):
-    x_bounds = (np.min(D[:, 0]) - 0.1, np.max(D[:, 0] + 0.1))
-    y_bounds = (np.min(D[:, 1]) - 0.1, np.max(D[:, 1] + 0.1))
+# def vis_data(D):
+#     x_bounds = (np.min(D[:, 0]) - 0.1, np.max(D[:, 0] + 0.1))
+#     y_bounds = (np.min(D[:, 1]) - 0.1, np.max(D[:, 1] + 0.1))
 
-    eps = 2
+#     eps = 2
 
-    grid2 = adaptive_noisy_grid(D, (x_bounds, y_bounds), eps, True, alpha=0.5)
+#     grid2 = adaptive_noisy_grid(D, (x_bounds, y_bounds), eps, True, alpha=0.5)
 
-    _, ax = plt.subplots(figsize=(10, 10))
-    visualize_grid(D, (x_bounds, y_bounds), grid2, ax)
-    plt.show()
-
-
-def moons():
-    D = np.array(sklearn.datasets.make_moons(n_samples=1000, noise=0.1)[0])
-    vis_data(D)
+#     _, ax = plt.subplots(figsize=(10, 10))
+#     visualize_grid(D, (x_bounds, y_bounds), grid2, ax)
+#     plt.show()
 
 
-def blobs():
-    D = np.array(sklearn.datasets.make_blobs(n_samples=1000, centers=3)[0])
-    vis_data(D)
+# def moons():
+#     D = np.array(sklearn.datasets.make_moons(n_samples=1000, noise=0.1)[0])
+#     vis_data(D)
+
+
+# def blobs():
+#     D = np.array(sklearn.datasets.make_blobs(n_samples=1000, centers=3)[0])
+#     vis_data(D)
 
 
 def vis_D(D, ax):
@@ -87,32 +85,32 @@ def vis_D_cells(traj_san, ax):
         ax.plot(centers[:, 0], centers[:, 1], "-")
 
 
-def test_vis_D():
-    traj_len = 5
-    D = np.array(
-        [
-            [
-                [np.random.uniform(0, 100), np.random.uniform(0, 100)]
-                for _ in range(traj_len)
-            ]
-            for _ in range(10000)
-        ]
-    )
-    x_range = (0, 100)
-    y_range = (0, 100)
+# def test_vis_D():
+#     traj_len = 5
+#     D = np.array(
+#         [
+#             [
+#                 [np.random.uniform(0, 100), np.random.uniform(0, 100)]
+#                 for _ in range(traj_len)
+#             ]
+#             for _ in range(10000)
+#         ]
+#     )
+#     x_range = (0, 100)
+#     y_range = (0, 100)
 
-    fig, ax = plt.subplots(1, 2, figsize=(10, 10))
-    for a in ax:
-        a.set_aspect("equal", "box")
-    vis_D(D, ax[0])
+#     fig, ax = plt.subplots(1, 2, figsize=(10, 10))
+#     for a in ax:
+#         a.set_aspect("equal", "box")
+#     vis_D(D, ax[0])
 
-    traj_san, counts = dpapt(
-        D, (0, traj_len - 1), (x_range, y_range), eps=0.5, alpha=0.5, randomize=True
-    )
+#     traj_san, counts = dpapt(
+#         D, (0, traj_len - 1), (x_range, y_range), eps=0.5, alpha=0.5, randomize=True
+#     )
 
-    vis_D_cells(traj_san, ax[1])
-    plt.show()
+#     vis_D_cells(traj_san, ax[1])
+# #     plt.show()
 
 
-if __name__ == "__main__":
-    test_vis_D()
+# if __name__ == "__main__":
+#     test_vis_D()

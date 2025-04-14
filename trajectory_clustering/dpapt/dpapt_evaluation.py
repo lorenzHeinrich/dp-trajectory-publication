@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial.distance import directed_hausdorff
 
-from trajectory_clustering.dpapt import dpapt
+from trajectory_clustering.dpapt.dpapt import DPAPT, post_process_centroid
 from trajectory_clustering.dpapt.vis_dpapt import vis_D, vis_D_cells
 
 
@@ -34,18 +34,18 @@ def dpapt_experiment(
     x_range = (np.min(D[:, :, 0]) - 0.1, np.max(D[:, :, 0] + 0.1))
     y_range = (np.min(D[:, :, 1]) - 0.1, np.max(D[:, :, 1] + 0.1))
 
-    D_cell, _ = dpapt.dpapt(
-        D,
-        t_interval,
-        bounds=(x_range, y_range),
-        eps=eps,
+    dpapt_ = DPAPT(
         alpha=alpha,
+        beta=alpha,
+        gamma=0.1,
         c1=c1,
         thresh_grid=thresh_grid,
         thresh_traj=thresh_traj,
         randomize=randomize,
     )
-    D_post = dpapt.post_process_centroid(D_cell)
+
+    D_cell, _ = dpapt_.publish(D, t_interval, (x_range, y_range), eps)
+    D_post = post_process_centroid(D_cell)
 
     D_trimmed = D[:, t_interval[0] : t_interval[1] + 1]
 
@@ -149,47 +149,37 @@ def evaluate_c1(D, t_interval, epsilons, alpha, c1_values, ax=None, c1_colors=No
 
 
 def eval_taxis():
-    df = pd.read_csv(
-        "t-drive-trajectories/release/taxi_log_2008_by_id/cleaned_normalized.csv"
-    )
-    sample = df[df["date"] == "2008-02-03"]
-
-    D = np.ndarray((0, 37, 2))
-    for id in sample["id"].unique():
-        D = np.concatenate(
-            (D, [sample[sample["id"] == id][["latitude", "longitude"]].values])
-        )
-
+    D = D_taxis(7, 700)
     _, axs = plt.subplots(1, 1)
-    time_intervals(D, 0, 6, epsilons=[1, 2, 3, 4], alpha=0.5, c1=10, ax=axs)
-
+    time_intervals(D, 0, 4, epsilons=[1, 2, 3, 4], alpha=0.5, c1=10, ax=axs)
     plt.show()
 
 
 def eval_gowalla():
-    m = 6
-    n = 100
+    m = 7
+    n = 10000
     D = D_gowalla(m, n)
-    eps = 2
-    t = (0, 2)
-    print(f"Experiment with ε={eps}, t={t}:")
-    result = dpapt_experiment(D, t, eps, 0.5, 10, [normalized_hausdorff])[0]
-    print(result)
+    _, axs = plt.subplots(1, 1)
+    time_intervals(D, 0, 2, epsilons=[1, 2, 3, 4], alpha=0.5, c1=10, ax=axs)
     plt.show()
 
 
-def sanity_check():
-    n = 5
-    m = 3
-
+def sanity_check(n, m):
     ((x_l, x_u), (y_l, y_u)) = ((0, 10), (0, 10))
     D = D_random(n, m, (x_l, x_u), (y_l, y_u))
 
     bounds = ((x_l, x_u), (y_l, y_u))
     t_interval = (0, m - 1)
-    D_cell, _ = dpapt.dpapt(
-        D, t_interval, bounds, eps=1, alpha=0.5, c1=2, randomize=False
+    dpapt_ = DPAPT(
+        alpha=0.5,
+        beta=0.5,
+        gamma=0.1,
+        c1=2,
+        thresh_grid=thresh_std_var,
+        thresh_traj=thresh_std_var,
+        randomize=False,
     )
+    D_cell, _ = dpapt_.publish(D, t_interval, bounds, eps=1)
     _, axs = plt.subplots(1, 2)
     vis_D(D, axs[0])
     vis_D_cells(D_cell, axs[1])
@@ -302,11 +292,11 @@ def benchmark_interval(D, epsilons=[0.5, 1, 2], c1=10, axs=None):
 
 
 if __name__ == "__main__":
-    eval_taxis()
-    # # eval_gowalla()
-    # sanity_check()
+    # eval_taxis()
+    # eval_gowalla()
+    # sanity_check(10, 10)
     D = D_gowalla(7, 20000)
     _, axs = plt.subplots(1, 1)
     benchmark_size(D, (0, 4), randomize=True, axs=axs)
-    # benchmark_interval(D, axs=axs)
+    benchmark_interval(D, axs=axs)
     plt.show()
