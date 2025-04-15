@@ -143,7 +143,7 @@ if __name__ == "__main__":
     )
     merged_days = merge_t_drive_days(t_drive, 2)
     print(merged_days.info())
-    D = csv_db_to_numpy(merged_days)
+    D = csv_db_to_numpy(merged_days)[:, :2]
     print(D.shape)
     bounds = ((0, 100), (0, 100))
     runs = 1

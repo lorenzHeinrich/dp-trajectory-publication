@@ -97,18 +97,31 @@ class Hua:
         release_trajects = np.empty((0, universes.shape[1], 2))
         release_counts = []
         logging.info(f"Interating over {len(noisy_counts)} noisy count intervals")
-        for i, (ci, cj) in enumerate(zip(noisy_counts[:-1], noisy_counts[1:])):
-            # f(x, b) = 1/(2b) e^(-x/b)
-            # using b = ε:
-            # f(x, ε) = 1/(2ε) e^(-x/ε)
-            # ∫ 1/(2ε) e^(-x/ε) dx = -1/2 e^(-x/ε)
-            # using b = 1/ε:
-            # f(x, 1/ε) = 1/2 ε e^(-xε)
-            # ∫ 1/2 ε e^(-x ε) dx = -1/2 e^(-xε)
-            antiderivative = lambda x: -1 / 2 * np.exp(-x * self.eps2)
-            integral = lambda a, b: antiderivative(b) - antiderivative(a)
+        # f(x, b) = 1/(2b) e^(-x/b)
+        # using b = ε:
+        # f(x, ε) = 1/(2ε) e^(-x/ε)
+        # ∫ 1/(2ε) e^(-x/ε) dx = -1/2 e^(-x/ε)
+        # using b = 1/ε:
+        # f(x, 1/ε) = 1/2 ε e^(-xε)
+        # ∫ 1/2 ε e^(-x ε) dx = -1/2 e^(-xε)
+        antiderivative = lambda x: -1 / 2 * np.exp(-x * self.eps2)
+        integral = lambda a, b: antiderivative(b) - antiderivative(a)
 
-            # num_i = |Ω - D'| * ∫_{c_j}^{c_i} f(x, ε)
+        num_is = [
+            (
+                (ci, cj),
+                int(
+                    # num_i = |Ω - D'| * ∫_{c_j}^{c_i} f(x, ε)
+                    np.round(size_remaining_omega * integral(cj, ci))
+                    if np.abs(ci - cj) > 0
+                    else 0
+                ),
+            )
+            for ci, cj in zip(noisy_counts[:-1], noisy_counts[1:])
+        ]
+
+        for i, ((ci, cj), num_i) in enumerate(num_is):
+
             num_i = int(np.round(size_remaining_omega * integral(cj, ci)))
 
             if num_i > 0:
