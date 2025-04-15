@@ -85,18 +85,16 @@ class Hua:
         return generalized_locations
 
     def _dp_release(self, D: np.ndarray, universes: np.ndarray):
-        logging.info(
-            f"Releasing {D.shape[0]} trajectories with {D.shape[1]} locations and {self.m} clusters"
-        )
-
         generalized, noisy_counts = self._noisy_count_generalized(D, universes)
+        logging.info(
+            f"Generalized dataset has {generalized.shape[0]} trajectories with {generalized.shape[1]} locations"
+        )
 
         size_omega = self.m ** universes.shape[1]
         size_remaining_omega = size_omega - generalized.shape[0]
-        total_count = 0
-        release_trajects = np.empty((0, universes.shape[1], 2))
-        release_counts = []
-        logging.info(f"Interating over {len(noisy_counts)} noisy count intervals")
+        logging.info(
+            f"Calculating num_is for {len(noisy_counts)} noisy count intervals"
+        )
         # f(x, b) = 1/(2b) e^(-x/b)
         # using b = ε:
         # f(x, ε) = 1/(2ε) e^(-x/ε)
@@ -119,10 +117,13 @@ class Hua:
             )
             for ci, cj in zip(noisy_counts[:-1], noisy_counts[1:])
         ]
-
+        logging.info(
+            f"{np.sum([num_i[1] > 0 for num_i in num_is])} non-zero intervals out of {len(num_is)}"
+        )
+        total_count = 0
+        release_trajects = np.empty((0, universes.shape[1], 2))
+        release_counts = []
         for i, ((ci, cj), num_i) in enumerate(num_is):
-
-            num_i = int(np.round(size_remaining_omega * integral(cj, ci)))
 
             if num_i > 0:
                 rand_trajects = np.array(
