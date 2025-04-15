@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import numpy as np
 import pandas as pd
@@ -103,7 +104,7 @@ def run(run, D, bounds, m, eps, t_int):
     return (stats_df, indiv_hd_df, query_distortion_df)
 
 
-def run_multiple(D, bounds, times, m, eps, t_int):
+def run_multiple(D, bounds, times, m, eps, t_int, parallel=True):
     """
     Run multiple experiments in parallel.
 
@@ -114,9 +115,15 @@ def run_multiple(D, bounds, times, m, eps, t_int):
     :param eps: Epsilon value
     :param t_int: Time interval
     """
-    results = Parallel(n_jobs=-1)(
-        delayed(run)(i, D, bounds, m, eps, t_int) for i in range(times)
-    )
+    results = []
+    if parallel:
+        results = Parallel(n_jobs=-1)(
+            delayed(run)(i, D, bounds, m, eps, t_int) for i in range(times)
+        )
+    else:
+        for i in range(times):
+            result = run(i, D, bounds, m, eps, t_int)
+            results.append(result)
     print("All runs completed.")
     stats_dfs = [result[0] for result in results]  # type: ignore
     indiv_hd_dfs = [result[1] for result in results]  # type: ignore
@@ -139,9 +146,12 @@ if __name__ == "__main__":
     D = csv_db_to_numpy(merged_days)
     print(D.shape)
     bounds = ((0, 100), (0, 100))
-    runs = 8
+    runs = 1
 
-    os.makedirs("results", exist_ok=True)
+    run_id = str(datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+    dir_path = f"results/hua/{run_id}"
+
+    os.makedirs(dir_path)
     stats_dfs = []
     indiv_hd_dfs = []
     query_distortion_dfs = []
@@ -151,7 +161,7 @@ if __name__ == "__main__":
     t_int = (0, D.shape[1] - 1)
     for eps in epsilons:
         for m in ms:
-            stats, ihd, qd = run_multiple(D, bounds, runs, m, eps, t_int)
+            stats, ihd, qd = run_multiple(D, bounds, runs, m, eps, t_int, False)
             stats_dfs.append(stats)
             indiv_hd_dfs.append(ihd)
             query_distortion_dfs.append(qd)
@@ -172,6 +182,6 @@ if __name__ == "__main__":
     stats_df = pd.concat(stats_dfs, ignore_index=True)
     indiv_hd_df = pd.concat(indiv_hd_dfs, ignore_index=True)
     query_distortion_df = pd.concat(query_distortion_dfs, ignore_index=True)
-    stats_df.to_csv("results/hua_stats.csv", index=False)
-    indiv_hd_df.to_csv("results/hua_indiv_hd.csv", index=False)
-    query_distortion_df.to_csv("results/hua_query_distortion.csv", index=False)
+    stats_df.to_csv(f"{dir_path}/stats.csv", index=False)
+    indiv_hd_df.to_csv(f"{dir_path}/indiv_hd.csv", index=False)
+    query_distortion_df.to_csv(f"{dir_path}/distortion.csv", index=False)
