@@ -178,8 +178,8 @@ if __name__ == "__main__":
     bounds = ((0, 100), (0, 100))
     t_int = (0, 2)
     epsilons = [0.8, 1.2, 1.6, 2.0]
-    # compare_hausdorff_vs_hua(D, bounds, t_int, epsilons)
-    # query_distortions_vs_eps(D, bounds, t_int, epsilons)
+    hausdorff_vs_eps(D, bounds, t_int, epsilons)
+    query_distortions_vs_eps(D, bounds, t_int, epsilons)
     t_ints = [(0, 1), (0, 2), (0, 3), (0, 4), (0, 5)]
     eps = 2
     compare_hausdorff_vs_t_int(D, bounds, t_ints, eps)

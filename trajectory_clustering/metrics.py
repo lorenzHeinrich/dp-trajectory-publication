@@ -93,3 +93,39 @@ def indiv_hausdorff(D, D_pub):
     D = D.reshape(D.shape[0], -1)
     D_pub = D_pub.reshape(D_pub.shape[0], -1)
     return np.array([np.min(np.linalg.norm(D - T, axis=1)) for T in D_pub])
+
+
+def query_distortion(D, D_pub, bounds, r):
+    """
+    Calculate the distortion of the query for the given dataset and published dataset.
+    :param D: Original dataset
+    :param D_pub: Published dataset
+    :param bounds: Bounds for the dataset
+    :param r: Radius for the query
+    :return: Distortion values for psi and dai queries
+    """
+    R = (
+        np.random.uniform(bounds[0][0], bounds[0][1]),
+        np.random.uniform(bounds[1][0], bounds[1][1]),
+    )
+    t_interval = np.random.randint(0, D.shape[1], 2)
+    q1 = lambda D: possibly_sometimes_inside(D, (R, r), t_interval, 0)
+    q2 = lambda D: definitely_always_inside(D, (R, r), t_interval, 0)
+
+    psi_distortion = range_query_distortion(D, D_pub, q1)
+    dai_distortion = range_query_distortion(D, D_pub, q2)
+
+    return psi_distortion, dai_distortion
+
+
+def expand(D, counts):
+    """
+    Expand the dataset D based on the counts of each trajectory.
+
+    :param D: Dataset to expand
+    :param counts: Counts of each trajectory
+    :return: Expanded dataset
+    """
+    return np.concatenate(
+        [np.repeat([T], count, axis=0) for T, count in zip(D, counts)]
+    )
