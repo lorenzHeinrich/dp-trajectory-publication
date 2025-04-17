@@ -1,10 +1,11 @@
 from datetime import datetime
 import os
+from time import time
 import numpy as np
 import pandas as pd
 
+from matplotlib import gridspec, pyplot as plt
 from joblib import Parallel, delayed
-from time import time
 
 from trajectory_clustering.hua.hua import Hua
 from trajectory_clustering.data.read_db import csv_db_to_numpy, merge_t_drive_days
