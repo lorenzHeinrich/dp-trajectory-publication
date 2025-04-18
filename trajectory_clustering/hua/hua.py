@@ -119,7 +119,7 @@ class Hua:
             # num_i = |Ω - D'| * ∫_{c_j}^{c_i} f(x, ε)
             num_i = int(np.round(size_remaining_omega * integral(cj, ci)))
 
-            max_num = np.min([num_i, D.shape[0] - total_count])
+            max_num = min(num_i, int(D.shape[0] - total_count))
             logger.info(
                 "Generating min(%d, %d) random trajectories for noisy count interval (%d, %d]",
                 num_i,
