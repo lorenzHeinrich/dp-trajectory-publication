@@ -113,21 +113,21 @@ class Hua:
             # using b = 1/ε:
             # f(x, 1/ε) = 1/2 ε e^(-xε)
             # ∫ 1/2 ε e^(-x ε) dx = -1/2 e^(-xε)
-            antiderivative = lambda x: -1 / 2 * np.exp(-x / self.eps2)
+            antiderivative = lambda x: -1 / 2 * np.exp(-x * self.eps2)
             integral = lambda a, b: antiderivative(b) - antiderivative(a)
 
             # num_i = |Ω - D'| * ∫_{c_j}^{c_i} f(x, ε)
             num_i = int(np.round(size_remaining_omega * integral(cj, ci)))
 
             max_num = min(num_i, int(D.shape[0] - total_count))
-            logger.info(
-                "Generating min(%d, %d) random trajectories for noisy count interval (%d, %d]",
-                num_i,
-                D.shape[0] - total_count,
-                cj,
-                ci,
-            )
             if num_i > 0:
+                logger.info(
+                    "Generating min(%d, %d) random trajectories for noisy count interval (%d, %d]",
+                    num_i,
+                    D.shape[0] - total_count,
+                    cj,
+                    ci,
+                )
                 rand_counts = np.array(
                     [secrets.randbelow(int(ci - cj)) + cj for _ in range(max_num)]
                 )
