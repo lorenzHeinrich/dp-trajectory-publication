@@ -1,8 +1,15 @@
+import logging
+from math import log
 import secrets
 import numpy as np
 from numpy import float64, floating, int64
 from sklearn.cluster import KMeans
 from diffprivlib.mechanisms import Exponential, Laplace
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 
 class Modification:
@@ -40,6 +47,12 @@ class Hua:
         self.eps2 = eps - self.eps1
 
     def publish(self, D: np.ndarray):
+        logger.info(
+            "Starting Hua algorithm with m=%d, phi=%d, eps=%.2f",
+            self.m,
+            self.phi,
+            self.eps1,
+        )
         D = D.reshape(D.shape[0], -1)
         generalized = self._dp_location_generalization(D)
         trajects, counts = self._dp_release(D, generalized)
@@ -47,7 +60,9 @@ class Hua:
         return trajects.reshape((trajects.shape[0], -1, 2)), counts
 
     def _dp_location_generalization(self, D: np.ndarray):
+        logger.info("Applying k-means clustering")
         kmeans = KMeans(n_clusters=self.m).fit(D)
+        logger.info("Constuctiong sub-optimal partitions")
         p_opt = (kmeans.labels_, kmeans.cluster_centers_)
         modifications = self._phi_sub_optimal(D, p_opt)
         s_partitions = self._s_kmeans_partitions(D)
@@ -60,28 +75,36 @@ class Hua:
         utility_score = lambda x: p_opt_mean_dist / self._mean_distance(
             x[1](D), x[0]
         )  # x.mean_distance() may be zero, but highly unlikely for real-world data
-
+        logger.info("Calculating utility scores for %d partitions", len(partitions))
         utilities = [utility_score(p) for p in partitions]
         exp = Exponential(
             epsilon=self.eps1, sensitivity=1, utility=utilities, candidates=partitions
         )
         ((_, centers), _) = exp.randomise()  # type: ignore
+        logger.info("Returning generalized trajectories")
+        universes = self._location_universes(centers)
+        return universes
 
-        return centers
-
-    def _dp_release(self, D: np.ndarray, generalized: np.ndarray):
-
-        # filter out non-positive counted trajectories
-        noisy_counts = list(
-            filter(lambda c: c > 0, self._make_noisy_counts(D, generalized))
+    def _dp_release(self, D: np.ndarray, universes: np.ndarray):
+        logger.info("Obtaining noisy counts for generalized trajectories")
+        # filter out non-positive counted trajectories and sort by count
+        generalized, noisy_counts = self._make_noisy_counts(D, universes)
+        nz_mask = noisy_counts > 0
+        generalized = generalized[nz_mask]
+        noisy_counts = noisy_counts[nz_mask]
+        sorted_pairs = sorted(
+            zip(generalized, noisy_counts), key=lambda x: x[1], reverse=True
         )
+        generalized, noisy_counts = map(np.array, zip(*sorted_pairs))
 
-        universes = self._location_universes(generalized)
-        size_omega = np.prod([u.shape[0] for u in universes])
+        size_omega = np.prod([u.shape[0] for u in universes], dtype=object)
         size_remaining_omega = size_omega - generalized.shape[0]
         total_count = 0
         release_trajects = np.empty((0, generalized.shape[1]))
         release_counts = []
+        logger.info(
+            "Doing noisy count estimation for %d trajectories", size_remaining_omega
+        )
         for i, (ci, cj) in enumerate(zip(noisy_counts[:-1], noisy_counts[1:])):
             # f(x, b) = 1/(2b) e^(-x/b)
             # using b = ε:
@@ -96,15 +119,32 @@ class Hua:
             # num_i = |Ω - D'| * ∫_{c_j}^{c_i} f(x, ε)
             num_i = int(np.round(size_remaining_omega * integral(cj, ci)))
 
+            max_num = np.min([num_i, D.shape[0] - total_count])
+            logger.info(
+                "Generating min(%d, %d) random trajectories for noisy count interval (%d, %d]",
+                num_i,
+                D.shape[0] - total_count,
+                cj,
+                ci,
+            )
             if num_i > 0:
-                rand_trajects = np.array(
-                    [self._draw_trajectory(universes) for _ in range(num_i)]
+                rand_counts = np.array(
+                    [secrets.randbelow(int(ci - cj)) + cj for _ in range(max_num)]
                 )
-                rand_counts = secrets.randbelow(ci - cj) + cj
-
-                release_trajects = np.concatenate((release_trajects, rand_trajects))
-                release_counts.append(rand_counts)
-                total_count += num_i + rand_counts
+                rand_trajects = np.array(
+                    [self._draw_trajectory(universes) for _ in range(max_num)]
+                )
+                cumulative_counts = np.cumsum(rand_counts)
+                valid_indices = cumulative_counts + total_count <= D.shape[0]
+                valid_rand_trajects = rand_trajects[valid_indices]
+                valid_rand_counts = rand_counts[valid_indices]
+                release_trajects = np.concatenate(
+                    (release_trajects, valid_rand_trajects)
+                )
+                release_counts.extend(valid_rand_counts.tolist())
+                total_count += (
+                    cumulative_counts[valid_indices][-1] if valid_indices.any() else 0
+                )
 
             release_trajects = np.concatenate((release_trajects, [generalized[i]]))
             release_counts.append(noisy_counts[i])
@@ -116,39 +156,51 @@ class Hua:
         return release_trajects, release_counts
 
     def _phi_sub_optimal(self, D: np.ndarray, p_opt) -> list[list[Modification]]:
-        indiv_mods = self._phi_sub_optimal_individual(D, p_opt)
-        result = [[indiv_mods[0]]]
+        candidate_mods = self._phi_sub_optimal_individual(D, p_opt)
+        best_sets: list[list[Modification]] = [[candidate_mods[0]]]
 
-        for indiv_mod in indiv_mods[1:]:
-            tmp = [[indiv_mod]]
+        logger.info(
+            "Calculating phi sub-optimal modifications for %d candidates",
+            len(candidate_mods),
+        )
+        for mod in candidate_mods[1:]:
+            new_sets: list[list[Modification]] = []
 
-            for mod in result:
-                if not any(indiv_mod.id == m.id for m in mod):
-                    new_mod = mod.copy() + [indiv_mod]
-                    tmp.append(new_mod)
+            for mod_set in best_sets:
+                used_ids = {m.id for m in mod_set}
+                if mod.id not in used_ids:
+                    new_set = mod_set + [mod]
+                    new_sets.append(new_set)
 
-            result += tmp
-            result.sort(key=lambda x: sum(float(m.distance) for m in x))
-            if len(result) > self.phi:
-                result = result[0 : self.phi]
+            best_sets += new_sets
+            # Sort sets by total utility loss
+            best_sets.sort(key=lambda mods: sum(float(m.distance) for m in mods))
 
-        return result
+            # Keep only top φ sets
+            if len(best_sets) > self.phi:
+                best_sets = best_sets[: self.phi]
+
+        return best_sets
 
     def _phi_sub_optimal_individual(self, D: np.ndarray, p_opt) -> list[Modification]:
+        logger.info("Calculating phi sub-optimal individual modifications")
         labels, centers = p_opt
-        modifications: list[Modification] = []
+        candidate_mods: list[Modification] = []
+
         for i, traj in enumerate(D):
-            label = labels[i]
-            dis_opt = np.linalg.norm(traj - centers[label])
+            current_cluster = labels[i]
+            original_dist = np.linalg.norm(traj - centers[current_cluster])
 
-            # move to other clusters and calculate distance change
-            for k in set(labels) - {label}:
-                dis = np.linalg.norm(traj - centers[k])
-                modifications.append(Modification(i, label, k, dis - dis_opt))
+            for k in set(labels) - {current_cluster}:
+                new_dist = np.linalg.norm(traj - centers[k])
+                loss = new_dist - original_dist
+                candidate_mods.append(Modification(i, current_cluster, k, loss))
 
-        return sorted(modifications, key=lambda x: float(x.distance))[0 : self.phi]
+        # Select top-ϕ modifications by lowest utility loss
+        return sorted(candidate_mods, key=lambda mod: float(mod.distance))[: self.phi]
 
     def _s_kmeans_partitions(self, D: np.ndarray):
+        logger.info("Calculating %d-k-means partitions", D.shape[0])
         partitions = []
         for id in range(D.shape[0]):
             D_ = np.delete(D, id, axis=0)
@@ -201,22 +253,27 @@ class Hua:
             traj[t] = secrets.choice(universes[t])
         return traj.flatten()
 
-    def _make_noisy_counts(self, D: np.ndarray, generalized: np.ndarray):
-        # calculate for each tr in D the distance to each center
-        centers = generalized
-        distances = np.linalg.norm(D[:, np.newaxis] - centers, axis=2)
-        # for each center, get the closest trajectory
-        closest = np.argmin(distances, axis=1)
-        # for each center, count how many trajectories are closest to it
-        counts = np.bincount(closest, minlength=centers.shape[0])
-        # add Laplace noise
+    def _make_noisy_counts(self, D: np.ndarray, universes: np.ndarray):
+        # calculate for each location of each trajectory the closest location
+        # in the genrealized universe for that point in time
+        D = D.reshape(D.shape[0], -1, 2)
+        D_generalized = np.empty(D.shape)
+        for t in range(D.shape[1]):
+            D_t = D[:, t, :]
+            centers = universes[t]
+            distances = np.linalg.norm(D_t[:, np.newaxis] - centers, axis=2)
+            closest = np.argmin(
+                distances, axis=1
+            )  # closest location in generalized dataset
+            D_generalized[:, t, :] = centers[closest]
+        D_generalized, counts = np.unique(
+            D_generalized.reshape(D.shape[0], -1), axis=0, return_counts=True
+        )
+        # add noise to counts
         lap = Laplace(epsilon=self.eps2, sensitivity=1)
-        noisy_counts = [lap.randomise(c) for c in counts]
+        noisy_counts = np.array([int(np.round(lap.randomise(c))) for c in counts])
 
-        # noisy counts should be discrete, the paper does not mention this
-        # we round to the nearest integer here
-        noisy_counts_discrete = [int(np.round(c)) for c in noisy_counts]
-        return sorted(noisy_counts_discrete, reverse=True)
+        return D_generalized, noisy_counts
 
     def _location_universes(self, generalized: np.ndarray):
         tuple_shaped = generalized.reshape(generalized.shape[0], -1, 2)

@@ -142,12 +142,12 @@ if __name__ == "__main__":
     t_drive = pd.read_csv(
         "t-drive-trajectories/release/taxi_log_2008_by_id/cleaned_normalized.csv"
     )
-    merged_days = merge_t_drive_days(t_drive, 2)
+    merged_days = merge_t_drive_days(t_drive, 3)
     print(merged_days.info())
-    D = csv_db_to_numpy(merged_days)[:, :2]
+    D = csv_db_to_numpy(merged_days)[:, :16]
     print(D.shape)
     bounds = ((0, 100), (0, 100))
-    runs = 1
+    runs = 16
 
     run_id = str(datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
     dir_path = f"results/hua/{run_id}"
@@ -158,19 +158,19 @@ if __name__ == "__main__":
     query_distortion_dfs = []
     # vary eps and m for fixed t_int
     epsilons = [0.5, 1, 2, 5]
-    ms = [20, 40, 60, 80]
+    ms = [40, 60, 80, 100]
     t_int = (0, D.shape[1] - 1)
     for eps in epsilons:
         for m in ms:
-            stats, ihd, qd = run_multiple(D, bounds, runs, m, eps, t_int, False)
+            stats, ihd, qd = run_multiple(D, bounds, runs, m, eps, t_int, True)
             stats_dfs.append(stats)
             indiv_hd_dfs.append(ihd)
             query_distortion_dfs.append(qd)
 
     # vary t_int for fixed m and eps
-    eps = 1
-    m = 60
-    t_ints = [(0, i) for i in range(1, 10)] + [
+    eps = 2
+    m = 80
+    t_ints = [(0, i) for i in range(1, 6)] + [
         (0, D.shape[1] // 2),
         (0, D.shape[1] - 1),
     ]

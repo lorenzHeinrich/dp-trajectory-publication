@@ -21,7 +21,8 @@ def df(request) -> DataFrame:
 
 @pytest.fixture
 def D(df):
-    return csv_db_to_numpy(df)
+    df_np = csv_db_to_numpy(df)
+    return df_np.reshape(df_np.shape[0], -1)
 
 
 @pytest.fixture
