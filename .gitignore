@@ -7,6 +7,6 @@ fake-trajectories.csv
 .pytest_cache
 *.png
 gowalla
-notebooks
 *.zip
 results
+figures
