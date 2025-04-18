@@ -1,10 +1,9 @@
-from datetime import datetime
 import os
-from time import time
 import numpy as np
 import pandas as pd
 
-from matplotlib import gridspec, pyplot as plt
+from time import time
+from datetime import datetime
 from joblib import Parallel, delayed
 
 from trajectory_clustering.hua.hua import Hua
@@ -84,7 +83,7 @@ def run(run, D, bounds, m, eps, t_int):
     print(f"Run {run + 1}: m = {m}, eps = {eps}, t_int = {t_int}")
     phi = 20
     hua = Hua(m, phi, eps)
-    D = D[:, t_int[0] : t_int[1] + 1]
+    D = D[:, t_int[0] : t_int[1] + 1].copy()
 
     start = time()
     D_pub, counts = hua.publish(D)
@@ -175,7 +174,7 @@ if __name__ == "__main__":
         (0, D.shape[1] - 1),
     ]
     for t_int in t_ints:
-        stats, ihd, qd = run_multiple(D, bounds, runs, m, eps, t_int)
+        stats, ihd, qd = run_multiple(D, bounds, runs, m, eps, t_int, True)
         stats_dfs.append(stats)
         indiv_hd_dfs.append(ihd)
         query_distortion_dfs.append(qd)
