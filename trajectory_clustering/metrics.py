@@ -16,7 +16,7 @@ def possibly_sometimes_inside(D, R, t_interval, uncertainty):
     """
     tb, te = t_interval
     (x, y), r = R
-    D_int = D[:, tb : te + 1, :]
+    D_int = D[:, tb:te, :]
 
     distances = np.sqrt((D_int[:, :, 0] - x) ** 2 + (D_int[:, :, 1] - y) ** 2)
 
@@ -95,7 +95,7 @@ def indiv_hausdorff(D, D_pub):
     return np.array([np.min(np.linalg.norm(D - T, axis=1)) for T in D_pub])
 
 
-def query_distortion(D, D_pub, bounds, r):
+def query_distortion(D, D_pub, R, t_int, uncertainty):
     """
     Calculate the distortion of the query for the given dataset and published dataset.
     :param D: Original dataset
@@ -104,28 +104,11 @@ def query_distortion(D, D_pub, bounds, r):
     :param r: Radius for the query
     :return: Distortion values for psi and dai queries
     """
-    R = (
-        np.random.uniform(bounds[0][0], bounds[0][1]),
-        np.random.uniform(bounds[1][0], bounds[1][1]),
-    )
-    t_interval = np.random.randint(0, D.shape[1], 2)
-    q1 = lambda D: possibly_sometimes_inside(D, (R, r), t_interval, 0)
-    q2 = lambda D: definitely_always_inside(D, (R, r), t_interval, 0)
+
+    q1 = lambda D: possibly_sometimes_inside(D, R, t_int, uncertainty)
+    q2 = lambda D: definitely_always_inside(D, R, t_int, uncertainty)
 
     psi_distortion = range_query_distortion(D, D_pub, q1)
     dai_distortion = range_query_distortion(D, D_pub, q2)
 
     return psi_distortion, dai_distortion
-
-
-def expand(D, counts):
-    """
-    Expand the dataset D based on the counts of each trajectory.
-
-    :param D: Dataset to expand
-    :param counts: Counts of each trajectory
-    :return: Expanded dataset
-    """
-    return np.concatenate(
-        [np.repeat([T], count, axis=0) for T, count in zip(D, counts)]
-    )

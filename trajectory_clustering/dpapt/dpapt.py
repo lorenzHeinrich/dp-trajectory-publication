@@ -13,9 +13,9 @@ thresh_default = lambda eps: 2 * np.sqrt(2) / eps
 class DPAPT:
     def __init__(
         self,
-        alpha,
-        beta,
-        gamma,
+        alpha,  # balance between grid and trajectory privacy
+        beta,  # balance between l1 and l2 privacy
+        gamma,  # balance between size estimation and grid privacy
         c1=10,
         thresh_grid=thresh_default,
         thresh_traj=thresh_default,
@@ -115,17 +115,12 @@ class DPAPT:
 
         return np.array(trajects_new), np.array(counts_valid)
 
-    def _adaptive_noisy_grid(self, L, bounds, eps, l2_counts):
+    def _adaptive_noisy_grid(self, L, bounds, eps, l2_counts: bool):
         logging.info("Starting adaptive_noisy_grid")
         epsN = self.gamma * eps
-        epsl1 = (
-            self.beta * (1 - self.gamma) * eps
-            if l2_counts is not None
-            else (1 - self.gamma) * eps
-        )
-        epsl2 = (
-            (1 - self.beta) * (1 - self.gamma) * eps if l2_counts is not None else epsl1
-        )
+        eps_remaining = eps - epsN
+        epsl1 = self.beta * eps_remaining if l2_counts else eps_remaining
+        epsl2 = (1 - self.beta) * eps_remaining if l2_counts else epsl1
 
         lap = Laplace(sensitivity=1, epsilon=epsN)
         N = max(
@@ -333,7 +328,7 @@ def post_process_centroid(D_cells):
                 (
                     (x_l + x_u) / 2,
                     (y_l + y_u) / 2,
-                )  # Sample random point inside cell
+                )  # Compute centroid of cell
                 for ((x_l, x_u), (y_l, y_u)) in traj
             ]
         )
