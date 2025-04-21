@@ -13,7 +13,7 @@ if __name__ == "__main__":
     beta = 0.5
     gamma = 0.1
     epsilons = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4]
-    t_ints = [(0, tu) for tu in range(1, D.shape[1] + 1) if tu < 8]
+    t_ints = [(0, tu) for tu in range(1, D.shape[1] + 1) if tu < 6]
 
     stats_dfs = []
     indiv_hd_dfs = []

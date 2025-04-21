@@ -108,7 +108,7 @@ class DPAPT:
             )
 
         logging.info(f"Constructing result took {time() - start:.2f}s")
-
+        counts_valid = np.array([int(np.round(count)) for count in counts_valid])
         logging.info(
             f"Returning {len(trajects_new)} trajectories, with counts summing to {np.sum(counts_valid)}",
         )
