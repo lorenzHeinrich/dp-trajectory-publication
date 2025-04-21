@@ -132,7 +132,7 @@ class DPAPT:
             ),
         )
         m1 = max(10, int(np.ceil(1 / 4 * np.ceil(np.sqrt(N * eps / self.c1)))))
-        print(f"m1: {m1}, N: {N}")
+
         ((x_l, x_u), (y_l, y_u)) = bounds
         xl1_step = (x_u - x_l) / m1
         yl1_step = (y_u - y_l) / m1
@@ -154,39 +154,14 @@ class DPAPT:
         )
 
         if l2_counts:
-            for x, y in L:
-                i = int((x - x_l) / xl1_step)
-                j = int((y - y_l) / yl1_step)
-                _, xl2_step, yl2_step, _, l2_grid = l2_grids[(i, j)]
-                x2 = int((x - (x_l + i * xl1_step)) / xl2_step)
-                y2 = int((y - (y_l + j * yl1_step)) / yl2_step)
-                l2_grid[x2, y2] += 1
-            lap = Laplace(sensitivity=1, epsilon=epsl2)
-            l2_grids = (
-                {
-                    k: (
-                        m2,
-                        x_step,
-                        y_step,
-                        loc,
-                        np.array(
-                            [[lap.randomise(count) for count in row] for row in counts]
-                        ),
-                    )
-                    for k, (m2, x_step, y_step, loc, counts) in l2_grids.items()
-                }
-                if self.randomize
-                else l2_grids
+            l2_grids = self._obtain_l2_counts(
+                L, l1_grid, l2_grids, x_l, y_l, xl1_step, yl1_step, epsl2
             )
-
-            self._apply_constraint_inference(l1_grid, l2_grids)
 
         logging.info("Finished adaptive_noisy_grid")
         return l2_grids
 
-    def _build_l2_grids(
-        self, l1_grid, epsl2, xl1_step, yl1_step, x_l, y_l, l2_counts=False
-    ):
+    def _build_l2_grids(self, l1_grid, epsl2, xl1_step, yl1_step, x_l, y_l, l2_counts):
         c2 = self.c1 / 2
         l2_grids = {}
         for i, j in np.ndindex(l1_grid.shape):
@@ -199,6 +174,37 @@ class DPAPT:
                 (i * xl1_step + x_l, j * yl1_step + y_l),
                 np.zeros((m2, m2)) if l2_counts else nc,
             )
+        return l2_grids
+
+    def _obtain_l2_counts(
+        self, L, l1_grid, l2_grids, x_l, y_l, xl1_step, yl1_step, epsl2
+    ):
+        for x, y in L:
+            i = int((x - x_l) / xl1_step)
+            j = int((y - y_l) / yl1_step)
+            _, xl2_step, yl2_step, _, l2_grid = l2_grids[(i, j)]
+            x2 = int((x - (x_l + i * xl1_step)) / xl2_step)
+            y2 = int((y - (y_l + j * yl1_step)) / yl2_step)
+            l2_grid[x2, y2] += 1
+        lap = Laplace(sensitivity=1, epsilon=epsl2)
+        l2_grids = (
+            {
+                k: (
+                    m2,
+                    x_step,
+                    y_step,
+                    loc,
+                    np.array(
+                        [[lap.randomise(count) for count in row] for row in counts]
+                    ),
+                )
+                for k, (m2, x_step, y_step, loc, counts) in l2_grids.items()
+            }
+            if self.randomize
+            else l2_grids
+        )
+
+        self._apply_constraint_inference(l1_grid, l2_grids)
         return l2_grids
 
     def _apply_constraint_inference(self, l1_grid, l2_grids):
