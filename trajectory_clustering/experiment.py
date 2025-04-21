@@ -28,6 +28,7 @@ def get_input():
     out_dir = args[1]
     n_runs = int(args[2])
     parallelize = "True" == args[3] if len(args) > 3 else True
+    n_cpus = int(args[4]) if len(args) > 4 else -1
     df = pd.read_csv(args[0])
     D = csv_db_to_numpy(df)
 
@@ -35,7 +36,7 @@ def get_input():
     max_x, max_y = D[:, :, 0].max(), D[:, :, 1].max()
     bounds = ((min_x - 0.1, max_x + 0.1), (min_y - 0.1, max_y + 0.1))
 
-    return out_dir, D, bounds, n_runs, parallelize
+    return out_dir, D, bounds, n_runs, parallelize, n_cpus
 
 
 def save_results(output_dir, stats_dfs, indiv_hd_dfs, query_distortion_dfs):
@@ -58,10 +59,12 @@ def save_results(output_dir, stats_dfs, indiv_hd_dfs, query_distortion_dfs):
     )
 
 
-def run_multiple_experiments(id, D, bounds, M, params, n_runs=16, parallelize=True):
+def run_multiple_experiments(
+    id, D, bounds, M, params, n_runs=16, parallelize=True, n_cpus=-1
+):
     results = []
     if parallelize:
-        results = Parallel(n_jobs=-1)(
+        results = Parallel(n_jobs=n_cpus)(
             delayed(experiment)(id, run, D, bounds, M, params) for run in range(n_runs)
         )
     else:

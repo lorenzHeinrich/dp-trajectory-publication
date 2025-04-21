@@ -7,7 +7,7 @@ from trajectory_clustering.experiment import (
 
 
 if __name__ == "__main__":
-    output_dir, D, bounds, n_runs, parallelize = get_input()
+    output_dir, D, bounds, n_runs, parallelize, n_cpus = get_input()
 
     phi = 100
     epsilons = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4]
@@ -26,7 +26,7 @@ if __name__ == "__main__":
             params = {"eps": eps, "m": m, "tl": t_int[0], "tu": t_int[1]}
             D_compare = D[:, t_int[0] : t_int[1] + 1]
             stats_df, indiv_hd_df, query_distortion_df = run_multiple_experiments(
-                id, D_compare, bounds, M, params, n_runs, parallelize
+                id, D_compare, bounds, M, params, n_runs, parallelize, n_cpus
             )
             stats_dfs.append(stats_df)
             indiv_hd_dfs.append(indiv_hd_df)
