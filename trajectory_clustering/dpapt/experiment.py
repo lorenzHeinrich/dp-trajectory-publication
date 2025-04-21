@@ -9,9 +9,6 @@ if __name__ == "__main__":
 
     output_dir, D, bounds, n_runs, parallelize, n_cpus = get_input()
 
-    alpha = 0.5
-    beta = 0.5
-    gamma = 0.1
     epsilons = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4]
     t_ints = [(0, tu) for tu in range(1, D.shape[1] + 1) if tu < 6]
 
@@ -22,10 +19,9 @@ if __name__ == "__main__":
     id = 0
     for eps in epsilons:
         for t_int in t_ints:
-            dpapt = DPAPT(alpha, beta, gamma)
 
             def M(eps, tl, tu):
-                D_cells, counts = dpapt.publish(D, (tl, tu), bounds, eps)
+                D_cells, counts = DPAPT().publish(D, (tl, tu), bounds, eps)
                 return post_process_centroid(D_cells), counts
 
             params = {"eps": eps, "tl": t_int[0], "tu": t_int[1]}

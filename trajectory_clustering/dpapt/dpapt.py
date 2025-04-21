@@ -13,9 +13,9 @@ thresh_default = lambda eps: 2 * np.sqrt(2) / eps
 class DPAPT:
     def __init__(
         self,
-        alpha,  # balance between grid and trajectory privacy
-        beta,  # balance between l1 and l2 privacy
-        gamma,  # balance between size estimation and grid privacy
+        alpha=0.5,  # balance between grid and trajectory privacy
+        beta=0.5,  # balance between l1 and l2 privacy
+        gamma=0.1,  # balance between size estimation and grid privacy
         c1=10,
         thresh_grid=thresh_default,
         thresh_traj=thresh_default,
@@ -39,12 +39,7 @@ class DPAPT:
         eps_grid = eps_step * self.alpha
         eps_traj = eps_step * (1 - self.alpha)
 
-        grids = self._adaptive_noisy_grid(
-            D[:, tu], bounds, eps_grid, l2_counts=(tu - tl == 0)
-        )
-        cells, counts = self._to_cells(
-            grids, self.thresh_grid(eps_grid) if self.randomize else 1
-        )
+        cells, counts = self._adaptive_noisy_cells(D[:, tu], bounds, eps_grid)
 
         if (tu - tl) == 0:
             logging.info("Reached base case of recursion")
@@ -115,115 +110,6 @@ class DPAPT:
 
         return np.array(trajects_new), np.array(counts_valid)
 
-    def _adaptive_noisy_grid(self, L, bounds, eps, l2_counts: bool):
-        logging.info("Starting adaptive_noisy_grid")
-        epsN = self.gamma * eps
-        eps_remaining = eps - epsN
-        epsl1 = self.beta * eps_remaining if l2_counts else eps_remaining
-        epsl2 = (1 - self.beta) * eps_remaining if l2_counts else epsl1
-
-        lap = Laplace(sensitivity=1, epsilon=epsN)
-        N = max(
-            1,
-            (
-                Laplace(sensitivity=1, epsilon=epsN).randomise(len(L))
-                if self.randomize
-                else len(L)
-            ),
-        )
-        m1 = max(10, int(np.ceil(1 / 4 * np.ceil(np.sqrt(N * eps / self.c1)))))
-
-        ((x_l, x_u), (y_l, y_u)) = bounds
-        xl1_step = (x_u - x_l) / m1
-        yl1_step = (y_u - y_l) / m1
-
-        lap = Laplace(sensitivity=1, epsilon=epsl1)
-        l1_grid = np.zeros((m1, m1))
-        for x, y in L:
-            i = int((x - x_l) / xl1_step)
-            j = int((y - y_l) / yl1_step)
-            l1_grid[i, j] += 1
-        l1_grid = (
-            np.array([[lap.randomise(n) for n in row] for row in l1_grid])
-            if self.randomize
-            else l1_grid
-        )
-
-        l2_grids = self._build_l2_grids(
-            l1_grid, epsl2, xl1_step, yl1_step, x_l, y_l, l2_counts
-        )
-
-        if l2_counts:
-            l2_grids = self._obtain_l2_counts(
-                L, l1_grid, l2_grids, x_l, y_l, xl1_step, yl1_step, epsl2
-            )
-
-        logging.info("Finished adaptive_noisy_grid")
-        return l2_grids
-
-    def _build_l2_grids(self, l1_grid, epsl2, xl1_step, yl1_step, x_l, y_l, l2_counts):
-        c2 = self.c1 / 2
-        l2_grids = {}
-        for i, j in np.ndindex(l1_grid.shape):
-            nc = l1_grid[i, j]
-            m2 = max(1, int(np.ceil(np.sqrt(max(0, nc) * epsl2 / c2))))
-            l2_grids[(i, j)] = (
-                m2,
-                xl1_step / m2,
-                yl1_step / m2,
-                (i * xl1_step + x_l, j * yl1_step + y_l),
-                np.zeros((m2, m2)) if l2_counts else nc,
-            )
-        return l2_grids
-
-    def _obtain_l2_counts(
-        self, L, l1_grid, l2_grids, x_l, y_l, xl1_step, yl1_step, epsl2
-    ):
-        for x, y in L:
-            i = int((x - x_l) / xl1_step)
-            j = int((y - y_l) / yl1_step)
-            _, xl2_step, yl2_step, _, l2_grid = l2_grids[(i, j)]
-            x2 = int((x - (x_l + i * xl1_step)) / xl2_step)
-            y2 = int((y - (y_l + j * yl1_step)) / yl2_step)
-            l2_grid[x2, y2] += 1
-        lap = Laplace(sensitivity=1, epsilon=epsl2)
-        l2_grids = (
-            {
-                k: (
-                    m2,
-                    x_step,
-                    y_step,
-                    loc,
-                    np.array(
-                        [[lap.randomise(count) for count in row] for row in counts]
-                    ),
-                )
-                for k, (m2, x_step, y_step, loc, counts) in l2_grids.items()
-            }
-            if self.randomize
-            else l2_grids
-        )
-
-        self._apply_constraint_inference(l1_grid, l2_grids)
-        return l2_grids
-
-    def _apply_constraint_inference(self, l1_grid, l2_grids):
-        for i, j in np.ndindex(l1_grid.shape):
-            l2_counts = l2_grids[(i, j)][4]
-            leafs_nc_sum = np.sum(l2_counts)
-            m2 = l2_grids[(i, j)][4].shape[0]
-            root_nc = l1_grid[i, j]
-
-            normalization = m2**2 * self.beta**2 + (1 - self.beta) ** 2
-            root_nc_weight = self.beta**2 * m2**2 / normalization
-            leafs_sum_weight = (1 - self.beta) ** 2 / normalization
-            nc_wavg = root_nc_weight * root_nc + leafs_sum_weight * leafs_nc_sum
-
-            l1_grid[i, j] = nc_wavg
-            leaf_diff = (nc_wavg - leafs_nc_sum) / m2
-            for x, y in np.ndindex(l2_counts.shape):
-                l2_grids[(i, j)][4][x, y] += leaf_diff
-
     def _inside_mask(self, D, t, cell):
         x, y = D[:, t, 0], D[:, t, 1]
         (x_l, x_u), (y_l, y_u) = cell
@@ -283,6 +169,112 @@ class DPAPT:
         in_cell = (x >= x_l) & (x < x_u) & (y >= y_l) & (y < y_u)
 
         return np.all(in_cell, axis=2)
+
+    def _adaptive_noisy_cells(self, L, bounds, eps):
+        epsN = self.gamma * eps
+        eps_remaining = eps - epsN
+        epsl1 = self.beta * eps_remaining
+        epsl2 = (1 - self.beta) * eps_remaining
+
+        lap = Laplace(sensitivity=1, epsilon=epsN)
+        N = max(
+            1,
+            (
+                Laplace(sensitivity=1, epsilon=epsN).randomise(len(L))
+                if self.randomize
+                else len(L)
+            ),
+        )
+        m1 = max(10, int(np.ceil(1 / 4 * np.ceil(np.sqrt(N * eps / self.c1)))))
+
+        ((x_l, x_u), (y_l, y_u)) = bounds
+        xl1_step = (x_u - x_l) / m1
+        yl1_step = (y_u - y_l) / m1
+
+        lap = Laplace(sensitivity=1, epsilon=epsl1)
+        l1_grid = np.zeros((m1, m1))
+        for x, y in L:
+            i = int((x - x_l) / xl1_step)
+            j = int((y - y_l) / yl1_step)
+            l1_grid[i, j] += 1
+        l1_grid = (
+            np.array([[lap.randomise(n) for n in row] for row in l1_grid])
+            if self.randomize
+            else l1_grid
+        )
+
+        l2_grids = self._build_l2_grids(l1_grid, epsl2, xl1_step, yl1_step, x_l, y_l)
+
+        l2_grids = self._obtain_l2_counts(
+            L, l1_grid, l2_grids, x_l, y_l, xl1_step, yl1_step, epsl2
+        )
+        cells, counts = self._to_cells(
+            l2_grids, self.thresh_grid(eps) if self.randomize else 1
+        )
+        return cells, counts
+
+    def _build_l2_grids(self, l1_grid, epsl2, xl1_step, yl1_step, x_l, y_l):
+        c2 = self.c1 / 2
+        l2_grids = {}
+        for i, j in np.ndindex(l1_grid.shape):
+            nc = l1_grid[i, j]
+            m2 = max(1, int(np.ceil(np.sqrt(max(0, nc) * epsl2 / c2))))
+            l2_grids[(i, j)] = (
+                m2,
+                xl1_step / m2,
+                yl1_step / m2,
+                (i * xl1_step + x_l, j * yl1_step + y_l),
+                np.zeros((m2, m2)),
+            )
+        return l2_grids
+
+    def _obtain_l2_counts(
+        self, L, l1_grid, l2_grids, x_l, y_l, xl1_step, yl1_step, epsl2
+    ):
+        for x, y in L:
+            i = int((x - x_l) / xl1_step)
+            j = int((y - y_l) / yl1_step)
+            _, xl2_step, yl2_step, _, l2_grid = l2_grids[(i, j)]
+            x2 = int((x - (x_l + i * xl1_step)) / xl2_step)
+            y2 = int((y - (y_l + j * yl1_step)) / yl2_step)
+            l2_grid[x2, y2] += 1
+        lap = Laplace(sensitivity=1, epsilon=epsl2)
+        l2_grids = (
+            {
+                k: (
+                    m2,
+                    x_step,
+                    y_step,
+                    loc,
+                    np.array(
+                        [[lap.randomise(count) for count in row] for row in counts]
+                    ),
+                )
+                for k, (m2, x_step, y_step, loc, counts) in l2_grids.items()
+            }
+            if self.randomize
+            else l2_grids
+        )
+
+        self._apply_constraint_inference(l1_grid, l2_grids)
+        return l2_grids
+
+    def _apply_constraint_inference(self, l1_grid, l2_grids):
+        for i, j in np.ndindex(l1_grid.shape):
+            l2_counts = l2_grids[(i, j)][4]
+            leafs_nc_sum = np.sum(l2_counts)
+            m2 = l2_grids[(i, j)][4].shape[0]
+            root_nc = l1_grid[i, j]
+
+            normalization = m2**2 * self.beta**2 + (1 - self.beta) ** 2
+            root_nc_weight = self.beta**2 * m2**2 / normalization
+            leafs_sum_weight = (1 - self.beta) ** 2 / normalization
+            nc_wavg = root_nc_weight * root_nc + leafs_sum_weight * leafs_nc_sum
+
+            l1_grid[i, j] = nc_wavg
+            leaf_diff = (nc_wavg - leafs_nc_sum) / m2
+            for x, y in np.ndindex(l2_counts.shape):
+                l2_grids[(i, j)][4][x, y] += leaf_diff
 
     def _to_cells(self, l2_grids, thresh):
         cells = []
