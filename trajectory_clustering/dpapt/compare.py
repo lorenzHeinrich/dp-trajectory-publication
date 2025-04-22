@@ -66,7 +66,7 @@ def dpapt_vs(D, D_var, vars, var_name, dpapt_m, vs_m, measure):
 def dpapt_vs_hua_var_eps(D, bounds, t_int, epsilons, measure):
     D_trunc = D[:, t_int[0] : t_int[1] + 1]
     hua = lambda D, eps: Hua(m=60, phi=100, eps=eps).publish(D)
-    dpapt = lambda D, eps: DPAPT(alpha=0.5, beta=0.5, gamma=0.1, c1=10).publish(
+    dpapt = lambda D, eps: DPAPT(alpha=0.5, beta=0.5, gamma=0.1, c=10).publish(
         D, t_int, bounds, eps
     )
 
@@ -76,7 +76,7 @@ def dpapt_vs_hua_var_eps(D, bounds, t_int, epsilons, measure):
 def dpapt_vs_hua_var_t_int(D, bounds, t_ints, eps, measure):
 
     hua = lambda D, _: Hua(m=60, phi=100, eps=eps).publish(D)
-    dpapt = lambda D, t_int: DPAPT(alpha=0.5, beta=0.5, gamma=0.1, c1=10).publish(
+    dpapt = lambda D, t_int: DPAPT(alpha=0.5, beta=0.5, gamma=0.1, c=10).publish(
         D, t_int, bounds, eps
     )
     D_var = lambda t_int: D[:, t_int[0] : t_int[1] + 1, :]
