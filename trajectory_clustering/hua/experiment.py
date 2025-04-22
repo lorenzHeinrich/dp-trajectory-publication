@@ -1,8 +1,7 @@
+from trajectory_clustering.experiment_io import get_input, save_results
 from trajectory_clustering.hua.hua import Hua
 from trajectory_clustering.experiment import (
-    get_input,
     run_multiple_experiments,
-    save_results,
 )
 
 

@@ -1,16 +1,13 @@
 from trajectory_clustering.dpapt.dpapt import DPAPT, post_process_centroid
-from trajectory_clustering.experiment import (
-    get_input,
-    run_multiple_experiments,
-    save_results,
-)
+from trajectory_clustering.experiment import run_multiple_experiments
+from trajectory_clustering.experiment_io import get_input, save_results
 
 if __name__ == "__main__":
 
     output_dir, D, bounds, n_runs, parallelize, n_cpus = get_input()
 
     epsilons = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4]
-    t_ints = [(0, tu) for tu in range(1, D.shape[1] + 1) if tu < 6]
+    t_ints = [(0, tu) for tu in range(1, D.shape[1] + 1) if tu < 5]
 
     stats_dfs = []
     indiv_hd_dfs = []
