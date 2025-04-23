@@ -15,25 +15,16 @@ thresh_default = lambda eps: 2 * np.sqrt(2) / eps
 class DPAPT:
     def __init__(
         self,
+        ac=AdaptiveCells(),
         alpha=0.5,  # balance between grid and trajectory privacy
-        beta=0.5,  # balance between l1 and l2 privacy
-        gamma=0.1,  # balance between size estimation and grid privacy
-        c=10.0,
-        thresh_grid=thresh_default,
-        thresh_traj=thresh_default,
+        thresh_traj=thresh_default,  # threshold for including a trajectory
         randomize=True,
     ):
+        self.ac = ac
         self.alpha = alpha
-        self.beta = beta
-        self.gamma = gamma
-        self.c = c
-        self.thresh_grid = thresh_grid
         self.thresh_traj = thresh_traj
         self.randomize = randomize
         self.secure_random = False
-        self.ac = AdaptiveCells(
-            c=c, beta=beta, gamma=gamma, thresh_grid=thresh_grid, randomize=randomize
-        )
 
     def publish(self, D, t_interval, bounds, eps):
         logger.info(
