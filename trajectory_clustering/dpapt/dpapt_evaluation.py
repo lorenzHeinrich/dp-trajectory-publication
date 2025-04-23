@@ -1,11 +1,17 @@
 from time import time
+import folium
 from matplotlib import pyplot as plt
+import matplotlib
 from matplotlib.axes import Axes
 from matplotlib.patches import Rectangle
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import directed_hausdorff
+import seaborn as sns
 
+from trajectory_clustering.data.read_db import t_drive
+from trajectory_clustering.dpapt import dpapt
+from trajectory_clustering.dpapt.adaptive_cells import AdaptiveCells
 from trajectory_clustering.dpapt.dpapt import DPAPT, post_process_centroid
 
 
@@ -165,28 +171,6 @@ def eval_gowalla():
     plt.show()
 
 
-def sanity_check(n, m):
-    ((x_l, x_u), (y_l, y_u)) = ((0, 10), (0, 10))
-    D = D_random(n, m, (x_l, x_u), (y_l, y_u))
-
-    bounds = ((x_l, x_u), (y_l, y_u))
-    t_interval = (0, m - 1)
-    dpapt_ = DPAPT(
-        alpha=0.5,
-        beta=0.5,
-        gamma=0.1,
-        c=2,
-        thresh_grid=thresh_std_var,
-        thresh_traj=thresh_std_var,
-        randomize=False,
-    )
-    D_cell, _ = dpapt_.publish(D, t_interval, bounds, eps=1)
-    _, axs = plt.subplots(1, 2)
-    vis_D(D, axs[0])
-    vis_D_cells(D_cell, axs[1])
-    plt.show()
-
-
 def D_random(n, m, x_range, y_range):
     ((x_l, x_u), (y_l, y_u)) = x_range, y_range
     D = np.array(
@@ -238,24 +222,6 @@ def visualize_grid(data, bounds, L2Grids, ax: Axes):
                 ha="center",
                 va="center",
             )
-
-
-def vis_D(D, ax):
-    for tr in D:
-        ax.plot(tr[:, 0], tr[:, 1], "o-")
-
-
-def vis_D_cells(traj_san, ax):
-    for traj in traj_san:
-        for cell in traj:
-            ((x_l, x_u), (y_l, y_u)) = cell
-            ax.add_patch(
-                Rectangle((x_l, y_l), x_u - x_l, y_u - y_l, fill=False, linestyle="--")
-            )
-        centers = np.array(
-            [((x_l + x_u) / 2, (y_l + y_u) / 2) for (x_l, x_u), (y_l, y_u) in traj]
-        )
-        ax.plot(centers[:, 0], centers[:, 1], "-")
 
 
 def D_gowalla(m, n):
@@ -349,12 +315,130 @@ def benchmark_interval(D, epsilons=[0.5, 1, 2], c1=10, axs=None):
     )
 
 
-if __name__ == "__main__":
-    # eval_taxis()
-    # eval_gowalla()
-    # sanity_check(10, 10)
-    D = D_gowalla(7, 20000)
-    _, axs = plt.subplots(1, 1)
-    benchmark_size(D, (0, 4), randomize=True, axs=axs)
-    benchmark_interval(D, axs=axs)
+def sanity_check():
+    D = np.array(
+        [[[4, 4], [6, 4], [8, 4]], [[2, 2], [4, 2], [6, 2]], [[3, 1], [5, 1], [7, 1]]]
+    )
+    t_interval = (0, 1)
+    bounds = ((0, 10), (0, 10))
+    eps = 1.0
+
+    dpapt = DPAPT(
+        randomize=False,
+        ac=AdaptiveCells(randomize=False, n_clusters=None, do_filter=True),
+    )
+    D_areas, counts = dpapt.publish(D, t_interval, bounds, eps)
+    print(D_areas, counts)
+    import matplotlib.pyplot as plt
+
+    _, ax = plt.subplots()
+    ax.set_xlim(bounds[0][0], bounds[0][1])
+    ax.set_ylim(bounds[1][0], bounds[1][1])
+    vis_D_cells(D_areas, ax=ax)
+    vis_D(D, ax=ax)
     plt.show()
+
+
+def vis_D(D, ax):
+    for tr in D:
+        ax.plot(tr[:, 0], tr[:, 1], "o-")
+
+
+def vis_D_cells(traj_san, ax):
+    pallate = sns.color_palette("colorblind", n_colors=len(traj_san))
+    for i, traj in enumerate(traj_san):
+        for area in traj:
+            for cell in area.cells:
+                ((x_l, x_u), (y_l, y_u)) = cell
+                ax.add_patch(
+                    Rectangle(
+                        (x_l, y_l),
+                        x_u - x_l,
+                        y_u - y_l,
+                        fill=True,
+                        alpha=0.5,
+                        color=pallate[i],
+                    )
+                )
+        centers = np.array([area.center for area in traj])
+        ax.plot(centers[:, 0], centers[:, 1], "-")
+
+        sns.scatterplot(
+            x=centers[:, 0],
+            y=centers[:, 1],
+            ax=ax,
+            color="red",
+            marker="x",
+        )
+
+
+def vis_D_folium(D, map_obj, data_bounds):
+    for tr in D:
+        coords = [(lat, lon) for lon, lat in tr]
+        coords = [denormalise_coords(lon, lat, data_bounds) for lon, lat in coords]
+        folium.PolyLine(coords, color="blue", weight=2).add_to(map_obj)
+        for lon, lat in coords:
+            folium.Marker(
+                [lat, lon], icon=folium.Icon(color="blue", icon="info-sign")
+            ).add_to(map_obj)
+
+
+def vis_D_cells_folium(D_areas, map_obj, data_bounds):
+    palette = sns.color_palette("colorblind", n_colors=len(D_areas))
+    for i, traj in enumerate(D_areas):
+        for area in traj:
+            for (xl, xu), (yl, yu) in area.cells:
+                # Denormalise corner coordinates
+                lon_l, lat_l = denormalise_coords(xl, yl, data_bounds)
+                lon_u, lat_u = denormalise_coords(xu, yu, data_bounds)
+                bounds = [(lat_l, lon_l), (lat_u, lon_u)]  # Folium expects (lat, lon)
+
+                folium.Rectangle(
+                    bounds=bounds,
+                    color=matplotlib.colors.to_hex(palette[i]),
+                    fill=True,
+                    fill_opacity=0.3,
+                    weight=1,
+                ).add_to(map_obj)
+
+            # Optional: add cluster centroid as a marker
+            lon, lat = denormalise_coords(area.center[0], area.center[1], data_bounds)
+            folium.CircleMarker([lat, lon], radius=3, color="black").add_to(map_obj)
+
+
+def denormalise_coords(norm_lon, norm_lat, bounds):
+    """
+    norm_lon, norm_lat: float or array-like values in [0, 100]
+    bounds: ((min_lon, max_lon), (min_lat, max_lat))
+    Returns: (lon, lat) in original coordinate space
+    """
+    (min_lon, max_lon), (min_lat, max_lat) = bounds
+    lon = norm_lon / 100 * (max_lon - min_lon) + min_lon
+    lat = norm_lat / 100 * (max_lat - min_lat) + min_lat
+    return lon, lat
+
+
+if __name__ == "__main__":
+    # min_long: 116.03725, max_long: 116.85369
+    # min_lat: 39.62473, max_lat: 40.27222
+    # scaling factor: 100
+    min_long, max_long = 116.03725, 116.85369
+    min_lat, max_lat = 39.62473, 40.27222
+    data_bounds = ((min_long, max_long), (min_lat, max_lat))
+
+    D, bounds = t_drive("small")
+    # D = D[:100]
+    ac = AdaptiveCells(n_clusters=40, do_filter=False)
+    eps = 5.0
+    t_int = (0, 0)
+    D_areas, counts = DPAPT(ac=ac).publish(D, t_int, bounds, eps)
+
+    center_lon, center_lat = denormalise_coords(
+        np.mean(D[:, :, 0]), np.mean(D[:, :, 1]), data_bounds
+    )
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=10)  # type: ignore
+
+    vis_D_folium(D[:, :1], m, data_bounds)
+    vis_D_cells_folium(D_areas, m, data_bounds)
+
+    m.save("dpapt_map.html")  # Save to view in browser

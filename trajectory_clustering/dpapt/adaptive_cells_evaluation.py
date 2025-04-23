@@ -43,7 +43,8 @@ def draw_cells(cells, ax, labels=None, centers=None):
 def compare_default_var_eps(L, bounds, epsilons=[0.5, 2], out_dir="./"):
     _, axs = plt.subplots(1, len(epsilons))
     for ax, eps in zip(axs, epsilons):
-        cells, _ = AdaptiveCells().adaptive_cells(L, bounds, eps)  # type: ignore
+        areas = AdaptiveCells().adaptive_cells(L, bounds, eps)  # type: ignore
+        cells = [cell for area in areas for cell in area.cells]
         draw_cells(cells, ax)
         ax.set_xlim(x_lb, x_ub)
         ax.set_ylim(y_lb, y_ub)
@@ -53,15 +54,16 @@ def compare_default_var_eps(L, bounds, epsilons=[0.5, 2], out_dir="./"):
         ax.set_aspect("equal")
         ax.grid()
     plt.tight_layout()
-    plt.savefig(f"{out_dir}/adaptive_cells_eps.svg")
+    plt.savefig(f"{out_dir}/adaptive_cells_eps.pdf", bbox_inches="tight")
 
 
 def compare_m2_eps(L, bounds, f_m1, f_m2, c=10, epsilons=[0.5, 2], out_dir="./"):
     _, axs = plt.subplots(1, len(epsilons))
     for ax, eps in zip(axs, epsilons):
-        cells, _ = AdaptiveCells(f_m1=f_m1, f_m2=f_m2, c=c).adaptive_cells(  # type: ignore
+        areas = AdaptiveCells(f_m1=f_m1, f_m2=f_m2, c=c).adaptive_cells(  # type: ignore
             L, bounds, eps
         )
+        cells = [cell for area in areas for cell in area.cells]
         draw_cells(cells, ax)
         ax.set_xlim(x_lb, x_ub)
         ax.set_ylim(y_lb, y_ub)
@@ -71,15 +73,18 @@ def compare_m2_eps(L, bounds, f_m1, f_m2, c=10, epsilons=[0.5, 2], out_dir="./")
         ax.set_aspect("equal")
         ax.grid()
     plt.tight_layout()
-    plt.savefig(f"{out_dir}/adaptive_cells_eps_fm_c{c}.svg")
+    plt.savefig(f"{out_dir}/adaptive_cells_eps_fm_c{c}.pdf", bbox_inches="tight")
 
 
 def compare_cluster(L, bounds, eps, do_filter, k=[10, 20]):
     _, axs = plt.subplots(1, len(k))
     for ax, k_ in zip(axs, k):
-        cells, _, labels, centers = AdaptiveCells(n_clusters=k_, do_filter=do_filter).adaptive_cells(  # type: ignore
+        areas = AdaptiveCells(n_clusters=k_, do_filter=do_filter).adaptive_cells(  # type: ignore
             L, bounds, eps
         )
+        cells = [cell for area in areas for cell in area.cells]
+        labels = [i for i, area in enumerate(areas) for _ in area.cells]
+        centers = np.array([area.center for area in areas])
         draw_cells(cells, ax, labels, centers)
         ax.set_xlim(x_lb, x_ub)
         ax.set_ylim(y_lb, y_ub)
@@ -90,7 +95,8 @@ def compare_cluster(L, bounds, eps, do_filter, k=[10, 20]):
         ax.grid()
     plt.tight_layout()
     plt.savefig(
-        f"figures/adaptive_cells/adaptive_cells_eps{eps}_k{"_filtered" if do_filter else ""}.svg"
+        f"figures/adaptive_cells/adaptive_cells_eps{eps}_k{"_filtered" if do_filter else ""}.pdf",
+        bbox_inches="tight",
     )
 
 

@@ -1,8 +1,10 @@
+from dataclasses import dataclass
 import logging
 
 import numpy as np
 
 from diffprivlib.mechanisms import Laplace
+from shapely import Polygon
 from sklearn.cluster import KMeans
 
 
@@ -13,7 +15,9 @@ class AdaptiveCells:
     def __init__(
         self,
         c=10.0,
-        f_m1=lambda N, eps, c: max(10, 1 / 4 * np.ceil(np.ceil(np.sqrt(N * eps / c)))),
+        f_m1=lambda N, eps, c: max(
+            10, int(1 / 4 * np.ceil(np.ceil(np.sqrt(N * eps / c))))
+        ),
         f_m2=lambda nc, eps, c: int(np.ceil(np.sqrt(max(1, nc * eps) / (c / 2)))),
         beta=0.5,  # balance between l1 and l2 privacy
         gamma=0.1,  # balance between size estimation and grid privacy
@@ -71,11 +75,24 @@ class AdaptiveCells:
         )
         cells, counts = self._to_cells(l2_grids, eps)
 
+        areas = []
         if self.n_clusters != None:
-            labels, centers = AGkM(cells, counts, self.n_clusters)
-            return cells, counts, labels, centers
+            labels, centers_ = AGkM(cells, counts, self.n_clusters)
+            areas = [
+                Area(
+                    cells[labels == label],
+                    counts[labels == label],
+                    centers_[label],
+                )
+                for label in range(self.n_clusters)
+            ]
+        else:
+            areas = [
+                Area([cell], count, self.cell_to_center(cell))
+                for cell, count in zip(cells, counts)
+            ]
 
-        return cells, counts
+        return areas
 
     def _build_l2_grids(self, l1_grid, epsl2, xl1_step, yl1_step, x_l, y_l):
         l2_grids = {}
@@ -155,6 +172,10 @@ class AdaptiveCells:
                     counts.append(count)
         return np.array(cells), np.array(counts)
 
+    def cell_to_center(self, cell):
+        (xl, xu), (yl, yu) = cell
+        return np.array([(xl + xu) / 2, (yl + yu) / 2])
+
 
 def AGkM(cells, counts, k):
     X = np.array([[(xl + xu) / 2, (yl + yu) / 2] for (xl, xu), (yl, yu) in cells])
@@ -163,3 +184,21 @@ def AGkM(cells, counts, k):
 
     km = KMeans(n_clusters=k, init=C).fit(X, sample_weight=counts)
     return km.labels_, km.cluster_centers_
+
+
+@dataclass
+class Area:
+    def __init__(self, cells, counts, center):
+        self.cells = cells
+        self.counts = counts
+        self.center = center
+
+    def sum_counts(self):
+        return np.sum(self.counts)
+
+    def __repr__(self):
+        return (
+            f"Area(center={self.center}, "
+            f"counts={self.counts}, "
+            f"num_cells={len(self.cells)})"
+        )

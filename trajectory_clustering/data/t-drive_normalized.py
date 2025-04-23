@@ -37,6 +37,9 @@ df["longitude"] = (df["longitude"] - min_long) / (max_long - min_long) * 100
 df["latitude"] = (df["latitude"] - min_lat) / (max_lat - min_lat) * 100
 
 df.to_csv(f"{directory_path}/cleaned_normalized.csv", index=False)
+print(f"min_long: {min_long}, max_long: {max_long}")
+print(f"min_lat: {min_lat}, max_lat: {max_lat}")
+print(f"scaling factor: 100")
 
 
 # ts = ["12:00:00", "12:10:00", "12:20:00", "12:30:00"]

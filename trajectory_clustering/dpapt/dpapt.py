@@ -36,12 +36,11 @@ class DPAPT:
         eps_step = eps / (tu - tl + 1)
         eps_grid = eps_step * self.alpha
         eps_traj = eps_step * (1 - self.alpha)
-
         # call adaptive_cells to estimate the location domain for the current time step
-        cells, counts = self.ac.adaptive_cells(D[:, tu], bounds, eps_grid)  # type: ignore
-
+        areas = self.ac.adaptive_cells(D[:, tu], bounds, eps_grid)
+        counts = np.array([area.sum_counts() for area in areas])
         if (tu - tl) == 0:
-            trajects_new = np.array([np.array([cell]) for cell in cells])
+            trajects_new = np.array([np.array([area]) for area in areas])
             logger.debug(
                 f"Returning {len(trajects_new)} trajectories, with counts summing to {np.sum(counts)}",
             )
@@ -52,29 +51,29 @@ class DPAPT:
         lap = Laplace(sensitivity=1, epsilon=eps_traj)
 
         logger.debug(
-            f"Processing t_interval={t_interval} with {len(cells)} cells and {len(trajects_prev)} previous trajectories"
+            f"Processing t_interval={t_interval} with {len(areas)} areas and {len(trajects_prev)} previous trajectories"
         )
 
         # initialize result arrays
         trajects_prev_len = len(trajects_prev)
-        cells_len = len(cells)
-        counts_len = cells_len * trajects_prev_len
+        areas_len = len(areas)
+        counts_len = areas_len * trajects_prev_len
         counts_true = np.empty(counts_len)  # true counts, tracked for debugging
         counts_rand = np.empty(counts_len)
 
         # preprocessing step that collects the trajectories in D that traverse the cell trajectories
         # this partitions the trajectories in D into disjoint sets for which the count queries are issued
-        D_traj_prev = self._traverses(D, trajects_prev)
+        D_traj_prev = self._traverses(D, trajects_prev, t_interval)
         logger.debug(
-            f"Traversing {len(D_traj_prev)} trajectories in D that traverse the cell trajectories"
+            f"Traversing {len(D_traj_prev)} trajectories in D that traverse the area trajectories"
         )
         offsets = (
-            np.arange(trajects_prev_len) * cells_len
+            np.arange(trajects_prev_len) * areas_len
         )  # the offset since we match each trajectory with all cells
         for offset, D_prev in zip(offsets, D_traj_prev):
             # obtain counts
-            counts = self._counts_inside(D_prev, tu, cells)
-            counts_true[offset : offset + cells_len] = counts
+            counts = self._counts_inside(D_prev, tu, areas)
+            counts_true[offset : offset + areas_len] = counts
 
             # randomize counts
             if self.randomize:
@@ -82,7 +81,7 @@ class DPAPT:
                     counts = np.array([lap.randomise(count) for count in counts])
                 else:
                     counts = counts + np.random.laplace(0, 1 / eps_traj, len(counts))
-            counts_rand[offset : offset + cells_len] = counts
+            counts_rand[offset : offset + areas_len] = counts
 
         logger.info(
             f"We have preserved {np.sum(counts_true > 0)} trajectories with counts summing to {np.sum(counts_true)}"
@@ -94,18 +93,12 @@ class DPAPT:
         counts_valid = counts_rand[valid_mask]
         counts_valid = np.array([int(np.round(count)) for count in counts_valid])
 
-        # build the new trajectories based on the valid cells
-        num_new_traj = int(np.sum(valid_mask))
-        trajects_new = np.empty((num_new_traj, tu - tl + 1, 2, 2))
-
-        traj_idx, cell_idx = np.where(valid_mask.reshape(trajects_prev_len, cells_len))
-        for i, (traj_i, cell_i) in enumerate(zip(traj_idx, cell_idx)):
-            trajects_new[i] = np.concatenate(
-                (
-                    trajects_prev[traj_i],
-                    np.array([np.array(cells[cell_i])]),
-                )
-            )
+        # build the new trajectories based on the valid areas
+        traj_idx, area_idx = np.where(valid_mask.reshape(trajects_prev_len, areas_len))
+        trajects_new = [
+            list(trajects_prev[traj_i]) + [areas[area_i]]
+            for traj_i, area_i in zip(traj_idx, area_idx)
+        ]
 
         logger.info(
             f"Returning {len(trajects_new)} trajectories, with counts summing to {np.sum(counts_valid)}",
@@ -113,72 +106,75 @@ class DPAPT:
 
         return trajects_new, counts_valid
 
-    def _counts_inside(self, D, t, cells):
+    def _counts_inside(self, D, t, areas):
         """
-        Count the number of points in D that are inside the cells.
+        Count the number of points in D that are inside each of the given areas.
+
         D: array of shape (n, m, 2)
         t: time index
-        cells: a single cells trajectory - array of shape (k, 2, 2)
-        Returns: array of shape (k,)
+        areas: list of Area objects
+        Returns: array of shape (len(areas),)
         """
-        if len(cells) == 0:
-            return np.zeros(0)
+        n = D.shape[0]
         x, y = D[:, t, 0], D[:, t, 1]
-        x_l, x_u = cells[:, 0, 0], cells[:, 0, 1]
-        y_l, y_u = cells[:, 1, 0], cells[:, 1, 1]
 
-        inside = (
-            (x[:, None] >= x_l)
-            & (x[:, None] < x_u)
-            & (y[:, None] >= y_l)
-            & (y[:, None] < y_u)
-        )
+        counts = np.zeros(len(areas), dtype=int)
 
-        return np.sum(inside, axis=0)
+        for i, area in enumerate(areas):
+            mask = np.zeros(n, dtype=bool)
+            for (xl, xu), (yl, yu) in area.cells:
+                mask |= (x >= xl) & (x < xu) & (y >= yl) & (y < yu)
+            counts[i] = np.sum(mask)
 
-    def _traverses(self, D, prev_trajects, batch_size=32):
+        return counts
+
+    def _traverses(self, D, prev_trajects, t_int, batch_size=32):
         """
-        Collect for each cell trajectory in prev_trajects the trajectories in D that traverse it.
+        Collect for each area-trajectory in prev_trajects the trajectories in D that traverse it.
+
         D: array of shape (n, m, 2)
-        prev_trajects: array of shape (k, m, 2, 2)
-        Returns: list of arrays of shape (n, m, 2) the same length as prev_trajects
+        prev_trajects: list of k area-trajectories, each a list of m Area objects
+        Returns: list of arrays of shape (n_i, m, 2), one for each matching area-trajectory
         """
         if len(prev_trajects) == 0:
             return []
-        batch_idx = np.arange(0, prev_trajects.shape[0], batch_size)
+
+        k = len(prev_trajects)
         traversing = []
 
-        for i in range(len(batch_idx) - 1):
-            mask = self._traverses_batch(
-                D, prev_trajects[batch_idx[i] : batch_idx[i + 1]]
-            )
-            traversing.extend(D[mask[:, j]] for j in range(mask.shape[1]))
+        for batch_start in range(0, k, batch_size):
+            batch = prev_trajects[batch_start : batch_start + batch_size]
+            mask = self._traverses_batch(D, t_int, batch)
+            for j in range(mask.shape[1]):
+                traversing.append(D[mask[:, j]])
 
-        mask = self._traverses_batch(D, prev_trajects[batch_idx[-1] :])
-        traversing.extend(D[mask[:, i]] for i in range(mask.shape[1]))
         return traversing
 
-    def _traverses_batch(self, D, prev_trajects):
+    def _traverses_batch(self, D, t_int, prev_trajects):
         """
-        Check if trajectories in D are inside the cell trajectories in prev_trajects.
+        Check if trajectories in D are inside the area-trajectories in prev_trajects.
 
         D: array of shape (n, m, 2)
-        prev_trajects: array of shape (k, m, 2, 2)
+        t_int: (tl, tu) — the time interval
+        prev_trajects: list of k area-trajectories, each a list of (tu - tl) Area objects
         Returns: boolean array of shape (n, k)
         """
-        D_truncated = D[:, : prev_trajects.shape[1]]  # (n, m, 2)
+        tl, tu = t_int
+        n = D.shape[0]
+        k = len(prev_trajects)
 
-        x = D_truncated[..., 0][:, None, :]  # (n, 1, m)
-        y = D_truncated[..., 1][:, None, :]  # (n, 1, m)
+        result = np.ones((n, k), dtype=bool)
 
-        x_l = prev_trajects[..., 0, 0][None, :, :]  # (1, k, m)
-        x_u = prev_trajects[..., 0, 1][None, :, :]  # (1, k, m)
-        y_l = prev_trajects[..., 1, 0][None, :, :]  # (1, k, m)
-        y_u = prev_trajects[..., 1, 1][None, :, :]  # (1, k, m)
+        for j, area_traj in enumerate(prev_trajects):
+            for i, t in enumerate(range(tl, tu)):
+                x = D[:, t, 0]
+                y = D[:, t, 1]
+                mask = np.zeros(n, dtype=bool)
+                for (xl, xu), (yl, yu) in area_traj[i].cells:
+                    mask |= (x >= xl) & (x < xu) & (y >= yl) & (y < yu)
+                result[:, j] &= mask  # Only keep those that matched all timestamps
 
-        in_cell = (x >= x_l) & (x < x_u) & (y >= y_l) & (y < y_u)  # (n, k, m)
-
-        return np.all(in_cell, axis=2)  # (n, k)
+        return result
 
 
 def post_process_uniform(D_cells):
@@ -203,23 +199,12 @@ def post_process_uniform(D_cells):
     return np.array(D_randomized, dtype=float)  # Convert to float array
 
 
-def post_process_centroid(D_cells):
+def post_process_centroid(D_areas):
     logging.info("Starting post_process_centroid")
-    D_centroids = np.empty(
-        (*D_cells.shape[0:2], 2), dtype=object
-    )  # Preallocate output array
+    D_centroids = np.empty((*D_areas.shape[0:2], 2), dtype=object)
 
-    for i, traj in enumerate(D_cells):
-        centroid_traj = np.array(
-            [
-                (
-                    (x_l + x_u) / 2,
-                    (y_l + y_u) / 2,
-                )  # Compute centroid of cell
-                for ((x_l, x_u), (y_l, y_u)) in traj
-            ]
-        )
-        D_centroids[i] = centroid_traj  # Store new trajectory
+    for i, area_traj in enumerate(D_areas):
+        D_centroids[i] = np.array([area.center for area in area_traj])
 
     logging.info("Finished post_process_centroid")
-    return np.array(D_centroids, dtype=float)  # Convert to float array
+    return D_centroids  # Convert to float array
