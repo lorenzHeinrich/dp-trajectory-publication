@@ -1,3 +1,4 @@
+from typing import Literal
 import pandas as pd
 import numpy as np
 
@@ -27,3 +28,21 @@ def merge_t_drive_days(t_drive_data: pd.DataFrame, n_days: int):
         merged_data.append(day_data)
 
     return pd.concat(merged_data, ignore_index=True)
+
+
+def t_drive(size: Literal["small", "medium", "all"] = "small"):
+    """
+    Load the T-Drive dataset.
+    :param size: "small", "medium", or "all"
+    :return: DataFrame
+    """
+    t_drive_data = pd.read_csv(f"sample_dbs/t_drive_{size}.csv")
+    D = csv_db_to_numpy(t_drive_data)
+    bounds = (
+        (
+            t_drive_data["longitude"].min() - 0.01,
+            t_drive_data["longitude"].max() + 0.01,
+        ),
+        (t_drive_data["latitude"].min() - 0.01, t_drive_data["latitude"].max() + 0.01),
+    )
+    return D, bounds

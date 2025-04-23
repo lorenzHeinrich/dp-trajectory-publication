@@ -2,9 +2,12 @@ import logging
 import numpy as np
 from diffprivlib.mechanisms import Laplace
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+from trajectory_clustering.dpapt.adaptive_cells import AdaptiveCells
+
+logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s")
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 thresh_default = lambda eps: 2 * np.sqrt(2) / eps
 
@@ -15,7 +18,7 @@ class DPAPT:
         alpha=0.5,  # balance between grid and trajectory privacy
         beta=0.5,  # balance between l1 and l2 privacy
         gamma=0.1,  # balance between size estimation and grid privacy
-        c=10,
+        c=10.0,
         thresh_grid=thresh_default,
         thresh_traj=thresh_default,
         randomize=True,
@@ -28,9 +31,12 @@ class DPAPT:
         self.thresh_traj = thresh_traj
         self.randomize = randomize
         self.secure_random = False
+        self.ac = AdaptiveCells(
+            c=c, beta=beta, gamma=gamma, thresh_grid=thresh_grid, randomize=randomize
+        )
 
     def publish(self, D, t_interval, bounds, eps):
-        logging.info(
+        logger.info(
             f"Starting dpapt with t_interval={t_interval}, eps={eps}, bounds={bounds}"
         )
 
@@ -41,16 +47,20 @@ class DPAPT:
         eps_traj = eps_step * (1 - self.alpha)
 
         # call adaptive_cells to estimate the location domain for the current time step
-        cells, counts = self._adaptive_cells(D[:, tu], bounds, eps_grid)
+        cells, counts = self.ac.adaptive_cells(D[:, tu], bounds, eps_grid)  # type: ignore
 
         if (tu - tl) == 0:
-            return np.array([np.array([cell]) for cell in cells]), counts
+            trajects_new = np.array([np.array([cell]) for cell in cells])
+            logger.debug(
+                f"Returning {len(trajects_new)} trajectories, with counts summing to {np.sum(counts)}",
+            )
+            return trajects_new, counts
 
         # get all sanatized trajectories from the previous time step
         trajects_prev, _ = self.publish(D, (tl, tu - 1), bounds, eps=eps - eps_step)
         lap = Laplace(sensitivity=1, epsilon=eps_traj)
 
-        logging.info(
+        logger.debug(
             f"Processing t_interval={t_interval} with {len(cells)} cells and {len(trajects_prev)} previous trajectories"
         )
 
@@ -64,7 +74,9 @@ class DPAPT:
         # preprocessing step that collects the trajectories in D that traverse the cell trajectories
         # this partitions the trajectories in D into disjoint sets for which the count queries are issued
         D_traj_prev = self._traverses(D, trajects_prev)
-
+        logger.debug(
+            f"Traversing {len(D_traj_prev)} trajectories in D that traverse the cell trajectories"
+        )
         offsets = (
             np.arange(trajects_prev_len) * cells_len
         )  # the offset since we match each trajectory with all cells
@@ -81,7 +93,7 @@ class DPAPT:
                     counts = counts + np.random.laplace(0, 1 / eps_traj, len(counts))
             counts_rand[offset : offset + cells_len] = counts
 
-        logging.info(
+        logger.info(
             f"We have preserved {np.sum(counts_true > 0)} trajectories with counts summing to {np.sum(counts_true)}"
         )
 
@@ -104,7 +116,7 @@ class DPAPT:
                 )
             )
 
-        logging.info(
+        logger.info(
             f"Returning {len(trajects_new)} trajectories, with counts summing to {np.sum(counts_valid)}",
         )
 
@@ -177,130 +189,9 @@ class DPAPT:
 
         return np.all(in_cell, axis=2)  # (n, k)
 
-    def _adaptive_cells(self, L, bounds, eps):
-        epsN = self.gamma * eps
-        eps_remaining = eps - epsN
-        epsl1 = self.beta * eps_remaining
-        epsl2 = (1 - self.beta) * eps_remaining
-
-        lap = Laplace(sensitivity=1, epsilon=epsN)
-        N = max(
-            1,
-            (
-                Laplace(sensitivity=1, epsilon=epsN).randomise(len(L))
-                if self.randomize
-                else len(L)
-            ),
-        )
-        m1 = max(10, int(np.ceil(1 / 4 * np.ceil(np.sqrt(N * eps / self.c)))))
-
-        ((x_l, x_u), (y_l, y_u)) = bounds
-        xl1_step = (x_u - x_l) / m1
-        yl1_step = (y_u - y_l) / m1
-
-        lap = Laplace(sensitivity=1, epsilon=epsl1)
-        l1_grid = np.zeros((m1, m1))
-        for x, y in L:
-            i = int((x - x_l) / xl1_step)
-            j = int((y - y_l) / yl1_step)
-            l1_grid[i, j] += 1
-        l1_grid = (
-            np.array([[lap.randomise(n) for n in row] for row in l1_grid])
-            if self.randomize
-            else l1_grid
-        )
-
-        l2_grids = self._build_l2_grids(l1_grid, epsl2, xl1_step, yl1_step, x_l, y_l)
-
-        l2_grids = self._obtain_l2_counts(
-            L, l1_grid, l2_grids, x_l, y_l, xl1_step, yl1_step, epsl2
-        )
-        cells, counts = self._to_cells(
-            l2_grids, self.thresh_grid(eps) if self.randomize else 1
-        )
-        return cells, counts
-
-    def _build_l2_grids(self, l1_grid, epsl2, xl1_step, yl1_step, x_l, y_l):
-        c2 = self.c / 2
-        l2_grids = {}
-        for i, j in np.ndindex(l1_grid.shape):
-            nc = l1_grid[i, j]
-            m2 = max(1, int(np.ceil(np.sqrt(max(0, nc) * epsl2 / c2))))
-            l2_grids[(i, j)] = (
-                m2,
-                xl1_step / m2,
-                yl1_step / m2,
-                (i * xl1_step + x_l, j * yl1_step + y_l),
-                np.zeros((m2, m2)),
-            )
-        return l2_grids
-
-    def _obtain_l2_counts(
-        self, L, l1_grid, l2_grids, x_l, y_l, xl1_step, yl1_step, epsl2
-    ):
-        for x, y in L:
-            i = int((x - x_l) / xl1_step)
-            j = int((y - y_l) / yl1_step)
-            _, xl2_step, yl2_step, _, l2_grid = l2_grids[(i, j)]
-            x2 = int((x - (x_l + i * xl1_step)) / xl2_step)
-            y2 = int((y - (y_l + j * yl1_step)) / yl2_step)
-            l2_grid[x2, y2] += 1
-        lap = Laplace(sensitivity=1, epsilon=epsl2)
-        l2_grids = (
-            {
-                k: (
-                    m2,
-                    x_step,
-                    y_step,
-                    loc,
-                    np.array(
-                        [[lap.randomise(count) for count in row] for row in counts]
-                    ),
-                )
-                for k, (m2, x_step, y_step, loc, counts) in l2_grids.items()
-            }
-            if self.randomize
-            else l2_grids
-        )
-
-        self._apply_constraint_inference(l1_grid, l2_grids)
-        return l2_grids
-
-    def _apply_constraint_inference(self, l1_grid, l2_grids):
-        for i, j in np.ndindex(l1_grid.shape):
-            l2_counts = l2_grids[(i, j)][4]
-            leafs_nc_sum = np.sum(l2_counts)
-            m2 = l2_grids[(i, j)][4].shape[0]
-            root_nc = l1_grid[i, j]
-
-            normalization = m2**2 * self.beta**2 + (1 - self.beta) ** 2
-            root_nc_weight = self.beta**2 * m2**2 / normalization
-            leafs_sum_weight = (1 - self.beta) ** 2 / normalization
-            nc_wavg = root_nc_weight * root_nc + leafs_sum_weight * leafs_nc_sum
-
-            l1_grid[i, j] = nc_wavg
-            leaf_diff = (nc_wavg - leafs_nc_sum) / m2
-            for x, y in np.ndindex(l2_counts.shape):
-                l2_grids[(i, j)][4][x, y] += leaf_diff
-
-    def _to_cells(self, l2_grids, thresh):
-        cells = []
-        counts = []
-        for m2, x_step, y_step, (x_start, y_start), cell_counts in l2_grids.values():
-            if np.ndim(cell_counts) == 0 and cell_counts < thresh:
-                continue
-            for i, j in np.ndindex((m2, m2)):
-                x_span = (x_start + i * x_step, x_start + (i + 1) * x_step)
-                y_span = (y_start + j * y_step, y_start + (j + 1) * y_step)
-                count = cell_counts if np.ndim(cell_counts) == 0 else cell_counts[i, j]
-                if count >= thresh:
-                    cells.append((x_span, y_span))
-                    counts.append(count)
-        return np.array(cells), np.array(counts)
-
 
 def post_process_uniform(D_cells):
-    logging.info("Starting post_process_uniform")
+    logger.info("Starting post_process_uniform")
     D_randomized = np.empty(
         (*D_cells.shape[0:2], 2), dtype=object
     )  # Preallocate output array
@@ -317,7 +208,7 @@ def post_process_uniform(D_cells):
         )
         D_randomized[i] = random_traj  # Store new trajectory
 
-    logging.info("Finished post_process_uniform")
+    logger.info("Finished post_process_uniform")
     return np.array(D_randomized, dtype=float)  # Convert to float array
 
 
