@@ -10,7 +10,11 @@ from trajectory_clustering.experiment_io import (
     make_query_distortion_df,
     make_stats_df,
 )
-from trajectory_clustering.metrics import hausdorff, indiv_hausdorff, query_distortion
+from trajectory_clustering.metrics import (
+    hausdorff,
+    individual_hausdorff,
+    query_distortion,
+)
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -65,7 +69,7 @@ def experiment(id, run, D, bounds, M, params):
         id, run, params, duration, D_pub.shape[0], np.sum(counts), hd
     )
 
-    indiv_hd_dists = indiv_hausdorff(D, D_pub)
+    indiv_hd_dists = individual_hausdorff(D, D_pub)
     indiv_hd_df = make_indiv_hd_df(id, run, params, indiv_hd_dists, counts)
 
     t_range = np.arange(0, D.shape[1] + 1, step=max(1, D.shape[1] // 4))

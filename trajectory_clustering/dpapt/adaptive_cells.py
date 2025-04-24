@@ -1,10 +1,8 @@
-from dataclasses import dataclass
 import logging
 
 import numpy as np
 
 from diffprivlib.mechanisms import Laplace
-from shapely import Polygon
 from sklearn.cluster import KMeans
 
 
@@ -186,14 +184,16 @@ def AGkM(cells, counts, k):
     return km.labels_, km.cluster_centers_
 
 
-@dataclass
 class Area:
-    def __init__(self, cells, counts, center):
-        self.cells = cells
-        self.counts = counts
+    def __init__(self, center, counts, cells):
         self.center = center
+        self.counts = counts
+        self.cells = cells
 
     def sum_counts(self):
+        """
+        Sum the counts of the cells in the area.
+        """
         return np.sum(self.counts)
 
     def __repr__(self):
@@ -202,3 +202,18 @@ class Area:
             f"counts={self.counts}, "
             f"num_cells={len(self.cells)})"
         )
+
+    def select_cell(self):
+        """
+        Randomly select a cell from the area with probability proportional to its count.
+        """
+        counts = np.copy(self.counts)
+        counts[counts < 0] = 0
+
+        total = np.sum(counts)
+        if total == 0:
+            return self.cells[np.random.randint(len(self.cells))]
+
+        props = counts / total
+        selected_cell = np.random.choice(len(self.cells), p=props)
+        return self.cells[selected_cell]

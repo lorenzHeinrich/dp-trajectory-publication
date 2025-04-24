@@ -69,32 +69,6 @@ def range_query_distortion(D, D_pub, Q):
     return distortion
 
 
-def hausdorff(D, D_pub):
-    """
-    Compute the Hausdorff distance between two datasets.
-    :param D: Original dataset
-    :param D_pub: Published dataset
-    :return: Hausdorff distance
-    """
-    D = D.reshape(D.shape[0], -1)
-    D_pub = D_pub.reshape(D_pub.shape[0], -1)
-    return max(
-        directed_hausdorff(D, D_pub)[0],
-        directed_hausdorff(D_pub, D)[0],
-    )
-
-
-def indiv_hausdorff(D, D_pub):
-    """
-    Compute the "individual" Hausdorff distance for each T in D_pub
-    .. math::
-        IdvHD(T) = min_{T' in D} ||T - T'||_2
-    """
-    D = D.reshape(D.shape[0], -1)
-    D_pub = D_pub.reshape(D_pub.shape[0], -1)
-    return np.array([np.min(np.linalg.norm(D - T, axis=1)) for T in D_pub])
-
-
 def query_distortion(D, D_pub, R, t_int, uncertainty):
     """
     Calculate the distortion of the query for the given dataset and published dataset.
@@ -112,3 +86,29 @@ def query_distortion(D, D_pub, R, t_int, uncertainty):
     dai_distortion = range_query_distortion(D, D_pub, q2)
 
     return psi_distortion, dai_distortion
+
+
+def hausdorff(D, D_pub):
+    """
+    Compute the Hausdorff distance between two datasets.
+    :param D: Original dataset
+    :param D_pub: Published dataset
+    :return: Hausdorff distance
+    """
+    D = D.reshape(D.shape[0], -1)
+    D_pub = D_pub.reshape(D_pub.shape[0], -1)
+    return max(
+        directed_hausdorff(D, D_pub)[0],
+        directed_hausdorff(D_pub, D)[0],
+    )
+
+
+def individual_hausdorff(D, D_pub):
+    """
+    Compute the "individual" Hausdorff distance for each T in D_pub
+    .. math::
+        IdvHD(T) = min_{T' in D} ||T - T'||_2
+    """
+    D = D.reshape(D.shape[0], -1)
+    D_pub = D_pub.reshape(D_pub.shape[0], -1)
+    return np.array([np.min(np.linalg.norm(D - T, axis=1)) for T in D_pub])
