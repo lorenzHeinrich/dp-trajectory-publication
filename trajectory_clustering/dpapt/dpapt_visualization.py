@@ -1,14 +1,12 @@
-from time import time
 import folium
-from matplotlib import pyplot as plt
 import matplotlib
 from matplotlib.axes import Axes
 from matplotlib.patches import Rectangle
 import numpy as np
-import pandas as pd
 import seaborn as sns
 
 from trajectory_clustering.data.read_db import t_drive
+from trajectory_clustering.data.transform import xy_to_lonlat
 from trajectory_clustering.dpapt.adaptive_cells import AdaptiveCells
 from trajectory_clustering.dpapt.dpapt import DPAPT
 
@@ -123,10 +121,10 @@ def vis_D_cells(traj_san, ax):
         )
 
 
-def vis_D_folium(D, map_obj, data_bounds):
+def vis_D_folium(D, map_obj):
     for tr in D:
         coords = [(lat, lon) for lon, lat in tr]
-        coords = [denormalise_coords(lon, lat, data_bounds) for lon, lat in coords]
+        coords = [xy_to_lonlat(lon, lat, "Beijing") for lon, lat in coords]
         folium.PolyLine(coords, color="blue", weight=2).add_to(map_obj)
         for lon, lat in coords:
             folium.Marker(
@@ -134,62 +132,42 @@ def vis_D_folium(D, map_obj, data_bounds):
             ).add_to(map_obj)
 
 
-def vis_D_cells_folium(D_areas, map_obj, data_bounds):
+def vis_D_cells_folium(D_areas, map_obj):
     palette = sns.color_palette("colorblind", n_colors=len(D_areas))
     for i, traj in enumerate(D_areas):
         for area in traj:
             for (xl, xu), (yl, yu) in area.cells:
                 # Denormalise corner coordinates
-                lon_l, lat_l = denormalise_coords(xl, yl, data_bounds)
-                lon_u, lat_u = denormalise_coords(xu, yu, data_bounds)
+                lon_l, lat_l = xy_to_lonlat(xl, yl, "Beijing")
+                lon_u, lat_u = xy_to_lonlat(xu, yu, "Beijing")
                 bounds = [(lat_l, lon_l), (lat_u, lon_u)]  # Folium expects (lat, lon)
 
                 folium.Rectangle(
                     bounds=bounds,
-                    color=matplotlib.colors.to_hex(palette[i]),  # type ignore
+                    color=matplotlib.colors.to_hex(palette[i]),
                     fill=True,
                     fill_opacity=0.3,
                     weight=1,
                 ).add_to(map_obj)
 
             # Optional: add cluster centroid as a marker
-            lon, lat = denormalise_coords(area.center[0], area.center[1], data_bounds)
+            lon, lat = xy_to_lonlat(area.center[0], area.center[1], "Beijing")
             folium.CircleMarker([lat, lon], radius=3, color="black").add_to(map_obj)
 
 
-def denormalise_coords(norm_lon, norm_lat, bounds):
-    """
-    norm_lon, norm_lat: float or array-like values in [0, 100]
-    bounds: ((min_lon, max_lon), (min_lat, max_lat))
-    Returns: (lon, lat) in original coordinate space
-    """
-    (min_lon, max_lon), (min_lat, max_lat) = bounds
-    lon = norm_lon / 100 * (max_lon - min_lon) + min_lon
-    lat = norm_lat / 100 * (max_lat - min_lat) + min_lat
-    return lon, lat
-
-
 if __name__ == "__main__":
-    # min_long: 116.03725, max_long: 116.85369
-    # min_lat: 39.62473, max_lat: 40.27222
-    # scaling factor: 100
-    min_long, max_long = 116.03725, 116.85369
-    min_lat, max_lat = 39.62473, 40.27222
-    data_bounds = ((min_long, max_long), (min_lat, max_lat))
-
     D, bounds = t_drive("small")
-    # D = D[:100]
-    ac = AdaptiveCells(n_clusters=40, do_filter=False)
+    ac = AdaptiveCells(n_clusters=20, do_filter=False)
     eps = 5.0
-    t_int = (0, 0)
+    t_int = (0, 4)
     D_areas, counts = DPAPT(ac=ac).publish(D, t_int, bounds, eps)
 
-    center_lon, center_lat = denormalise_coords(
-        np.mean(D[:, :, 0]), np.mean(D[:, :, 1]), data_bounds
+    center_lon, center_lat = xy_to_lonlat(
+        float(np.mean(D[:, :, 0])), float(np.mean(D[:, :, 1])), "Beijing"
     )
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=10)  # type: ignore
+    m = folium.Map(location=[center_lat, center_lon], tiles="OpenStreetMap.DE", zoom_start=10)  # type: ignore
 
-    vis_D_folium(D[:, :1], m, data_bounds)
-    vis_D_cells_folium(D_areas, m, data_bounds)
+    # vis_D_folium(D[:, :2], m)
+    vis_D_cells_folium(D_areas[4:5], m)
 
-    m.save("dpapt_map.html")  # Save to view in browser
+    m.save("maps/dpapt_map.html")  # Save to view in browser

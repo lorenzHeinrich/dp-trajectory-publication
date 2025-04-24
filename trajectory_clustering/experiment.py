@@ -77,7 +77,7 @@ def experiment(id, run, D, bounds, M, params):
     uncertainties = [2, 10, 25]
     n_queries = 50
     query_distortion_dfs = []
-    D_exp = expand(D_pub, counts)
+
     for uncertainty in uncertainties:
         for t_int in t_ints:
             distortions = []
@@ -111,17 +111,4 @@ def random_region(bounds):
             np.random.uniform(bounds[1][0], bounds[1][1]),
         ),
         np.random.uniform(span // 100, span // 10),
-    )
-
-
-def expand(D, counts):
-    """
-    Expand the dataset D based on the counts of each trajectory.
-
-    :param D: Dataset to expand
-    :param counts: Counts of each trajectory
-    :return: Expanded dataset
-    """
-    return np.concatenate(
-        [np.repeat([T], count, axis=0) for T, count in zip(D, counts)]
     )

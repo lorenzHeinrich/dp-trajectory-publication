@@ -8,7 +8,7 @@ if __name__ == "__main__":
     os.makedirs("sample_dbs", exist_ok=True)
 
     t_drive = pd.read_csv(
-        "t-drive-trajectories/release/taxi_log_2008_by_id/cleaned_normalized.csv"
+        "t-drive-trajectories/release/taxi_log_2008_by_id/cleaned_projected.csv"
     )
 
     t_drive_small = merge_t_drive_days(t_drive, 1)

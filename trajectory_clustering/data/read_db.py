@@ -9,7 +9,7 @@ def csv_db_to_numpy(df: pd.DataFrame):
     n = int(df.shape[0] / len)
     D = np.empty((n, 2 * len))
     for idx, (_, group) in enumerate(df.groupby("id")):
-        group = group[["longitude", "latitude"]].to_numpy()
+        group = group[["x", "y"]].to_numpy()
         D[idx] = group.flatten()
     return D.reshape(n, len, 2)
 
@@ -39,10 +39,7 @@ def t_drive(size: Literal["small", "medium", "all"] = "small"):
     t_drive_data = pd.read_csv(f"sample_dbs/t_drive_{size}.csv")
     D = csv_db_to_numpy(t_drive_data)
     bounds = (
-        (
-            t_drive_data["longitude"].min() - 0.01,
-            t_drive_data["longitude"].max() + 0.01,
-        ),
-        (t_drive_data["latitude"].min() - 0.01, t_drive_data["latitude"].max() + 0.01),
+        (t_drive_data["x"].min() - 0.01, t_drive_data["x"].max() + 0.01),
+        (t_drive_data["y"].min() - 0.01, t_drive_data["y"].max() + 0.01),
     )
     return D, bounds

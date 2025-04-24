@@ -175,36 +175,3 @@ class DPAPT:
                 result[:, j] &= mask  # Only keep those that matched all timestamps
 
         return result
-
-
-def post_process_uniform(D_cells):
-    logger.info("Starting post_process_uniform")
-    D_randomized = np.empty(
-        (*D_cells.shape[0:2], 2), dtype=object
-    )  # Preallocate output array
-
-    for i, traj in enumerate(D_cells):
-        random_traj = np.array(
-            [
-                (
-                    np.random.uniform(x_l, x_u),
-                    np.random.uniform(y_l, y_u),
-                )  # Sample random point inside cell
-                for ((x_l, x_u), (y_l, y_u)) in traj
-            ]
-        )
-        D_randomized[i] = random_traj  # Store new trajectory
-
-    logger.info("Finished post_process_uniform")
-    return np.array(D_randomized, dtype=float)  # Convert to float array
-
-
-def post_process_centroid(D_areas):
-    logging.info("Starting post_process_centroid")
-    D_centroids = np.empty((*D_areas.shape[0:2], 2), dtype=object)
-
-    for i, area_traj in enumerate(D_areas):
-        D_centroids[i] = np.array([area.center for area in area_traj])
-
-    logging.info("Finished post_process_centroid")
-    return D_centroids  # Convert to float array

@@ -86,7 +86,7 @@ class AdaptiveCells:
             ]
         else:
             areas = [
-                Area([cell], count, self.cell_to_center(cell))
+                Area([cell], count, cell_to_center(cell))
                 for cell, count in zip(cells, counts)
             ]
 
@@ -170,9 +170,10 @@ class AdaptiveCells:
                     counts.append(count)
         return np.array(cells), np.array(counts)
 
-    def cell_to_center(self, cell):
-        (xl, xu), (yl, yu) = cell
-        return np.array([(xl + xu) / 2, (yl + yu) / 2])
+
+def cell_to_center(cell):
+    (xl, xu), (yl, yu) = cell
+    return np.array([(xl + xu) / 2, (yl + yu) / 2])
 
 
 def AGkM(cells, counts, k):
@@ -185,7 +186,7 @@ def AGkM(cells, counts, k):
 
 
 class Area:
-    def __init__(self, center, counts, cells):
+    def __init__(self, cells, counts, center):
         self.center = center
         self.counts = counts
         self.cells = cells
@@ -217,3 +218,14 @@ class Area:
         props = counts / total
         selected_cell = np.random.choice(len(self.cells), p=props)
         return self.cells[selected_cell]
+
+    def cell_closest_to_center(self):
+        """
+        Return the cell whose centroid is closest to the area's center.
+        """
+        center = self.center
+        dists = [
+            np.linalg.norm(np.array(cell_to_center(cell)) - center)
+            for cell in self.cells
+        ]
+        return self.cells[np.argmin(dists)]

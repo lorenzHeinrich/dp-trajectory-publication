@@ -3,53 +3,62 @@ import numpy as np
 from scipy.spatial.distance import directed_hausdorff
 
 
-def possibly_sometimes_inside(D, R, t_interval, uncertainty):
+def possibly_sometimes_inside(D, R, t_interval, uncertainties):
     """
-    Calculate the number of trajectories that are possibly inside the circle at least once,
-    considering a fixed uncertainty radius for each trajectory point.
+    Compute the number of trajectories that are possibly inside a circular region
+    at least once during the specified time interval, given pointwise uncertainty.
 
-    :param D: Original dataset
-    :param R: Circle defined by center (x, y) and radius r
-    :param t_interval: Time interval (tb, te)
-    :param uncertainty: Fixed uncertainty radius for the entire trajectory, for each point
-    :return: Number of trajectories that are possibly inside the circle at least once
-    """
-    tb, te = t_interval
-    (x, y), r = R
-    D_int = D[:, tb:te, :]
+    Parameters:
+        D: ndarray of shape (n, m, 2) — trajectory dataset
+        R: ((x, y), r) — circular query region
+        t_interval: (tb, te) — time interval (inclusive)
+        uncertainties: ndarray of shape (n, m) — uncertainty radius for each point
 
-    distances = np.sqrt((D_int[:, :, 0] - x) ** 2 + (D_int[:, :, 1] - y) ** 2)
-
-    # Check if the distance from each point to the center of the circle is
-    # less than or equal to the radius plus the uncertainty for any point
-    inside = np.any(distances <= (r + uncertainty), axis=1)
-
-    return np.sum(inside)
-
-
-def definitely_always_inside(D, R, t_interval, uncertainty):
-    """
-    Calculate the number of trajectories that are definitely always inside the circle,
-    considering the full uncertainty radius around each trajectory point.
-
-    :param D: Original dataset
-    :param R: Circle defined by center (x, y) and radius r
-    :param t_interval: Time interval (tb, te)
-    :param uncertainty: Fixed uncertainty radius for each trajectory point
-    :return: Number of trajectories that are definitely always inside the circle
+    Returns:
+        Number of trajectories that possibly intersect the region at least once
     """
     tb, te = t_interval
     (x, y), r = R
 
-    D_int = D.reshape(D.shape[0], -1, 2)[:, tb : te + 1, :]
+    D_slice = D[:, tb : te + 1, :]  # (n, t_span, 2)
+    U_slice = uncertainties[:, tb : te + 1]  # (n, t_span)
 
-    distances = np.sqrt((D_int[:, :, 0] - x) ** 2 + (D_int[:, :, 1] - y) ** 2)
+    dx = D_slice[:, :, 0] - x
+    dy = D_slice[:, :, 1] - y
+    dist = np.sqrt(dx**2 + dy**2)
 
-    # Check if the distance from each point to the center of the circle is
-    # less than or equal to the radius minus the uncertainty for all points
-    inside = np.all(distances <= (r - uncertainty), axis=1)
+    inside = dist <= (r + U_slice)
+    return np.any(inside, axis=1).sum()
 
-    return np.sum(inside)
+
+def definitely_always_inside(D, R, t_interval, uncertainties):
+    """
+    Compute the number of trajectories that are definitely always inside a circular region,
+    given per-point uncertainty.
+
+    A point is considered definitely inside if its full uncertainty radius lies within the query circle.
+
+    Parameters:
+        D: ndarray of shape (n, m, 2) — trajectory dataset
+        R: ((x, y), r) — circular query region
+        t_interval: (tb, te) — time interval (inclusive)
+        uncertainties: ndarray of shape (n, m) — uncertainty radius for each point
+
+    Returns:
+        Number of trajectories that are always fully within the region during the time interval
+    """
+    tb, te = t_interval
+    (x, y), r = R
+
+    D_slice = D[:, tb : te + 1, :]  # (n, t_span, 2)
+    U_slice = uncertainties[:, tb : te + 1]  # (n, t_span)
+
+    dx = D_slice[:, :, 0] - x
+    dy = D_slice[:, :, 1] - y
+    dist = np.sqrt(dx**2 + dy**2)
+
+    inside = dist <= (r - U_slice)
+    return np.all(inside, axis=1).sum()
 
 
 def range_query_distortion(D, D_pub, Q):
@@ -69,18 +78,17 @@ def range_query_distortion(D, D_pub, Q):
     return distortion
 
 
-def query_distortion(D, D_pub, R, t_int, uncertainty):
+def query_distortion(D, D_pub, R, t_int, uncertainties):
     """
-    Calculate the distortion of the query for the given dataset and published dataset.
+    Compute the query distortion for the given datasets and query region.
     :param D: Original dataset
     :param D_pub: Published dataset
-    :param bounds: Bounds for the dataset
-    :param r: Radius for the query
-    :return: Distortion values for psi and dai queries
+    :param R: Query region (center, radius)
+    :param t_int: Time interval (start, end)
     """
 
-    q1 = lambda D: possibly_sometimes_inside(D, R, t_int, uncertainty)
-    q2 = lambda D: definitely_always_inside(D, R, t_int, uncertainty)
+    q1 = lambda D: possibly_sometimes_inside(D, R, t_int, uncertainties)
+    q2 = lambda D: definitely_always_inside(D, R, t_int, uncertainties)
 
     psi_distortion = range_query_distortion(D, D_pub, q1)
     dai_distortion = range_query_distortion(D, D_pub, q2)
