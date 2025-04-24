@@ -50,12 +50,12 @@ def run_multiple_experiments(
 
 def experiment(id, run, D, bounds, M, params):
     logger.info(f"Running run {run + 1} for experiment {id} with params: {params}")
-    start = time()
     D = D.copy()
-    D_pub, counts = M(**params)
+
+    start = time()
+    D_pub, U = M(**params)
     duration = time() - start
 
-    # the mechaism did not publish anything, possibly due to a too small eps
     if D_pub.shape[0] == 0:
         logger.warning(
             f"Published dataset is empty for run {run + 1} of experiment {id}."
@@ -63,39 +63,42 @@ def experiment(id, run, D, bounds, M, params):
         stats_df = make_stats_df(id, run, params, duration, 0, 0, np.nan)
         return stats_df, pd.DataFrame(), pd.DataFrame()
 
-    # D_exp = expand(D_pub, counts)
-    hd = hausdorff(D, D_pub)
-    stats_df = make_stats_df(
-        id, run, params, duration, D_pub.shape[0], np.sum(counts), hd
+    D_pub_unique, counts = np.unique(
+        D_pub.reshape(D_pub.shape[0], -1), axis=0, return_counts=True
     )
+    D_pub_unique = D_pub_unique.reshape(D_pub.shape[0], D_pub.shape[1], -1)
 
-    indiv_hd_dists = individual_hausdorff(D, D_pub)
+    hd = hausdorff(D, D_pub_unique)
+    stats_df = make_stats_df(id, run, params, duration, counts, np.sum(counts), hd)
+
+    indiv_hd_dists = individual_hausdorff(D, D_pub_unique)
     indiv_hd_df = make_indiv_hd_df(id, run, params, indiv_hd_dists, counts)
 
-    t_range = np.arange(0, D.shape[1] + 1, step=max(1, D.shape[1] // 4))
+    t_range = np.arange(0, min(4, D_pub.shape[1] + 1))
     t_ints = [(tl, tu) for tl in t_range for tu in t_range if tl < tu]
-    uncertainties = [2, 10, 25]
-    n_queries = 50
+    n_queries = 100
     query_distortion_dfs = []
 
-    for uncertainty in uncertainties:
-        for t_int in t_ints:
-            distortions = []
-            for _ in range(n_queries):
-                R = random_region(bounds)
-                distortions.append(query_distortion(D, D_exp, R, t_int, uncertainty))
-            query_distortion_dfs.append(
-                make_query_distortion_df(
-                    id,
-                    run,
-                    params,
-                    uncertainty,
-                    t_int[1] - t_int[0],
-                    distortions,
-                )
+    for t_int in t_ints:
+        distortions = []
+        radii = []
+        for _ in range(n_queries):
+            (p, r) = random_region(bounds)
+            radii.append(r)
+            distortions.append(query_distortion(D, D_pub, (p, r), t_int, U))
+        query_distortion_dfs.append(
+            make_query_distortion_df(
+                id,
+                run,
+                params,
+                t_int[1] - t_int[0],
+                radii,
+                distortions,
             )
+        )
+
     query_distortion_df = pd.concat(query_distortion_dfs, ignore_index=True)
-    return (stats_df, indiv_hd_df, query_distortion_df)
+    return stats_df, indiv_hd_df, query_distortion_df
 
 
 def random_region(bounds):

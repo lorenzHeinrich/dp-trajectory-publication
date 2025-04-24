@@ -86,7 +86,7 @@ def make_indiv_hd_df(id, run, param_dict, indiv_hd_dists, counts):
     )
 
 
-def make_query_distortion_df(id, run, param_dict, uncertainty, t_range, distortions):
+def make_query_distortion_df(id, run, param_dict, t_range, radii, distortions):
     return pd.concat(
         [
             pd.DataFrame(
@@ -97,13 +97,17 @@ def make_query_distortion_df(id, run, param_dict, uncertainty, t_range, distorti
                         **param_dict,
                         "query_run": i + 1,
                         "t_range": t_range,
-                        "uncertainty": uncertainty,
-                        "psi_distortion": psi_distortion,
-                        "dai_distortion": dai_distortion,
+                        "radius": r,
+                        "psi_distortion_abs": psi_abs,
+                        "psi_distortion_rel": psi_rel,
+                        "dai_distortion_abs": dai_abs,
+                        "dai_distortion_rel": dai_rel,
                     }
                 ]
             )
-            for i, (psi_distortion, dai_distortion) in enumerate(distortions)
+            for i, (((psi_abs, psi_rel), (dai_abs, dai_rel)), r) in enumerate(
+                zip(distortions, radii)
+            )
         ],
         ignore_index=True,
     )

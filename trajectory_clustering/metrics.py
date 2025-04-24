@@ -61,37 +61,46 @@ def definitely_always_inside(D, R, t_interval, uncertainties):
     return np.all(inside, axis=1).sum()
 
 
-def range_query_distortion(D, D_pub, Q):
+def range_query_distortion(D, D_pub, U, Q):
     """
-    Compute the range query distortion between the original and published datasets.
-    :param D: Original dataset
-    :param D_pub: Published dataset
-    :param Q: Query function
-    :return: Range query distortion
+    Compute both absolute and relative range query distortion between
+    the original and published datasets.
+
+    Parameters:
+        D: ndarray (n, t, 2) — Original dataset
+        D_pub: ndarray (n, t, 2) — Sanitized dataset
+        U: ndarray (n, t) — Per-point uncertainties for D_pub
+        Q: callable — Query function of the form Q(D, U) -> float
+
+    Returns:
+        (abs_error, rel_error)
+        abs_error: |Q(D) - Q(D_pub)|
+        rel_error: abs_error / Q(D)
     """
+    D_U = np.zeros(D.shape[:2])  # Original data has zero uncertainty
+    R_D = Q(D, D_U)
+    R_D_pub = Q(D_pub, U)
 
-    R_D = Q(D)
-    R_D_pub = Q(D_pub)
-    distortion = np.abs(R_D - R_D_pub) / (
-        max(R_D, R_D_pub) + 1e-12  # Avoid division by zero
-    )
-    return distortion
+    abs_error = np.abs(R_D - R_D_pub)
+    rel_error = abs_error / (R_D + 1e-12)
+
+    return abs_error, rel_error
 
 
-def query_distortion(D, D_pub, R, t_int, uncertainties):
+def query_distortion(D, D_pub, R, t_int, U):
     """
     Compute the query distortion for the given datasets and query region.
     :param D: Original dataset
     :param D_pub: Published dataset
     :param R: Query region (center, radius)
     :param t_int: Time interval (start, end)
+    :param U: Uncertainty radii for each point of each trajectory
     """
+    q1 = lambda D, U: possibly_sometimes_inside(D, R, t_int, U)
+    q2 = lambda D, U: definitely_always_inside(D, R, t_int, U)
 
-    q1 = lambda D: possibly_sometimes_inside(D, R, t_int, uncertainties)
-    q2 = lambda D: definitely_always_inside(D, R, t_int, uncertainties)
-
-    psi_distortion = range_query_distortion(D, D_pub, q1)
-    dai_distortion = range_query_distortion(D, D_pub, q2)
+    psi_distortion = range_query_distortion(D, D_pub, U, q1)
+    dai_distortion = range_query_distortion(D, D_pub, U, q2)
 
     return psi_distortion, dai_distortion
 
