@@ -30,8 +30,8 @@ def post_process_with_uncertainty(D_areas, counts, sample=False, uniform=False):
 
             for area in area_traj:
                 point, radius = derive_point_and_uncertainty(area, sample, uniform)
-                traj_points.append(point)  # type: ignore
-                traj_uncertainties.append(radius)  # type: ignore
+                traj_points.append(point)
+                traj_uncertainties.append(radius)
 
             D_out[idx] = traj_points
             U_out[idx] = traj_uncertainties
@@ -94,12 +94,16 @@ def cell_radius(cell):
 def area_weighted_radius(area):
     """
     Calculate the weighted average distance of the cells to the area center.
+    For singleton areas (1 cell), return the radius of that cell.
 
     Parameters:
         area: Area object
     Returns:
         float: weighted average distance of the cells to the area center
     """
+    if len(area.cells) == 1:
+        return cell_radius(area.cells[0])
+
     centers = np.array([cell_to_center(cell) for cell in area.cells])
     distances = np.linalg.norm(centers - area.center, axis=1)
     counts = np.maximum(area.counts, 0)
