@@ -1,0 +1,56 @@
+{
+    "experiment_name": "cluster",
+    "output_dir": "results/dpapt/cluster",
+    "log_level": "INFO",
+    "dataset": "sample_dbs/t_drive_small.csv",
+    "n_runs": 16,
+    "parallelize": true,
+    "n_cpus": -1,
+    "dpapt": {
+        "eps": [
+            1.0,
+            1.5,
+            2.0,
+            2.5,
+            3.0,
+            6.0,
+            8.0
+        ],
+        "tu": [
+            1,
+            2,
+            3,
+            4,
+            6,
+            8
+        ]
+    },
+    "adaptive_cells": {
+        "c": [
+            10
+        ],
+        "f_m1": [
+            "eps_sensitive"
+        ],
+        "f_m2": [
+            "eps_sensitive"
+        ],
+        "n_clusters": [
+            20,
+            30,
+            40,
+            50
+        ],
+        "do_filter": [
+            false
+        ]
+    },
+    "postprocess": {
+        "sample": [
+            false
+        ],
+        "uniform": [
+            false
+        ]
+    }
+}

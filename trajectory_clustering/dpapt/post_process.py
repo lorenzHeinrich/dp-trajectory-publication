@@ -108,4 +108,8 @@ def area_weighted_radius(area):
     distances = np.linalg.norm(centers - area.center, axis=1)
     counts = np.maximum(area.counts, 0)
 
-    return np.average(distances, weights=counts)
+    total_weight = np.sum(counts)
+    if total_weight > 0:
+        return np.average(distances, weights=counts)
+    else:
+        return np.mean(distances)

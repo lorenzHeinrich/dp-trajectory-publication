@@ -4,12 +4,8 @@ from diffprivlib.mechanisms import Laplace
 
 from trajectory_clustering.dpapt.adaptive_cells import AdaptiveCells
 
-logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s")
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-thresh_default = lambda eps: 2 * np.sqrt(2) / eps
 
 
 class DPAPT:
@@ -17,7 +13,9 @@ class DPAPT:
         self,
         ac=AdaptiveCells(),
         alpha=0.5,  # balance between grid and trajectory privacy
-        thresh_traj=thresh_default,  # threshold for including a trajectory
+        thresh_traj=lambda eps: 2
+        * np.sqrt(2)
+        / eps,  # threshold for including a trajectory
         randomize=True,
     ):
         self.ac = ac
@@ -27,7 +25,7 @@ class DPAPT:
         self.secure_random = False
 
     def publish(self, D, t_interval, bounds, eps):
-        logger.info(
+        logger.debug(
             f"Starting dpapt with t_interval={t_interval}, eps={eps}, bounds={bounds}"
         )
 
@@ -38,7 +36,7 @@ class DPAPT:
         eps_traj = eps_step * (1 - self.alpha)
         # call adaptive_cells to estimate the location domain for the current time step
         areas = self.ac.adaptive_cells(D[:, tu], bounds, eps_grid)
-        counts = np.array([area.sum_counts() for area in areas])
+        counts = np.array([int(np.round(area.sum_counts())) for area in areas])
         if (tu - tl) == 0:
             trajects_new = np.array([np.array([area]) for area in areas])
             logger.debug(
@@ -83,7 +81,7 @@ class DPAPT:
                     counts = counts + np.random.laplace(0, 1 / eps_traj, len(counts))
             counts_rand[offset : offset + areas_len] = counts
 
-        logger.info(
+        logger.debug(
             f"We have preserved {np.sum(counts_true > 0)} trajectories with counts summing to {np.sum(counts_true)}"
         )
 
@@ -95,12 +93,14 @@ class DPAPT:
 
         # build the new trajectories based on the valid areas
         traj_idx, area_idx = np.where(valid_mask.reshape(trajects_prev_len, areas_len))
-        trajects_new = [
-            list(trajects_prev[traj_i]) + [areas[area_i]]
-            for traj_i, area_i in zip(traj_idx, area_idx)
-        ]
+        trajects_new = np.array(
+            [
+                list(trajects_prev[traj_i]) + [areas[area_i]]
+                for traj_i, area_i in zip(traj_idx, area_idx)
+            ]
+        )
 
-        logger.info(
+        logger.debug(
             f"Returning {len(trajects_new)} trajectories, with counts summing to {np.sum(counts_valid)}",
         )
 

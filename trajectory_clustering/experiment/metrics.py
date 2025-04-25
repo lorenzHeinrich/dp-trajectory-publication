@@ -75,14 +75,14 @@ def range_query_distortion(D, D_pub, U, Q):
     Returns:
         (abs_error, rel_error)
         abs_error: |Q(D) - Q(D_pub)|
-        rel_error: abs_error / Q(D)
+        rel_error: abs_error / max(Q(D), Q(D_pub))
     """
     D_U = np.zeros(D.shape[:2])  # Original data has zero uncertainty
     R_D = Q(D, D_U)
     R_D_pub = Q(D_pub, U)
 
     abs_error = np.abs(R_D - R_D_pub)
-    rel_error = abs_error / (R_D + 1e-12)
+    rel_error = abs_error / (max(R_D, R_D_pub) + 1e-12)
 
     return abs_error, rel_error
 

@@ -1,0 +1,52 @@
+{
+    "experiment_name": "eps_agnostic",
+    "output_dir": "results/dpapt/eps_agnostic",
+    "log_level": "INFO",
+    "dataset": "sample_dbs/t_drive_small.csv",
+    "n_runs": 16,
+    "parallelize": true,
+    "n_cpus": -1,
+    "dpapt": {
+        "eps": [
+            1,
+            1.5,
+            2,
+            2.5,
+            3
+        ],
+        "tu": [
+            1,
+            2,
+            3,
+            4
+        ]
+    },
+    "adaptive_cells": {
+        "c": [
+            50,
+            100,
+            200
+        ],
+        "f_m1": [
+            "eps_agnostic"
+        ],
+        "f_m2": [
+            "eps_agnostic"
+        ],
+        "n_clusters": [
+            null
+        ],
+        "do_filter": [
+            true
+        ]
+    },
+    "postprocess": {
+        "sample": [
+            false
+        ],
+        "uniform": [
+            false,
+            true
+        ]
+    }
+}

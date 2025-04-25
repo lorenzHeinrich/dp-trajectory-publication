@@ -82,7 +82,7 @@ class AdaptiveCells:
                     counts[labels == label],
                     centers_[label],
                 )
-                for label in range(self.n_clusters)
+                for label in np.unique(labels)
             ]
         else:
             areas = [

@@ -5,12 +5,12 @@ import pandas as pd
 from time import time
 from joblib import Parallel, delayed
 
-from trajectory_clustering.experiment_io import (
+from trajectory_clustering.experiment.experiment_io import (
     make_indiv_hd_df,
     make_query_distortion_df,
     make_stats_df,
 )
-from trajectory_clustering.metrics import (
+from trajectory_clustering.experiment.metrics import (
     hausdorff,
     individual_hausdorff,
     query_distortion,
@@ -63,13 +63,18 @@ def experiment(id, run, D, bounds, M, params):
         stats_df = make_stats_df(id, run, params, duration, 0, 0, np.nan)
         return stats_df, pd.DataFrame(), pd.DataFrame()
 
+    logger.info(
+        f"Run {run + 1} of experiment {id} completed in {duration:.2f} seconds."
+    )
+    logger.info(f"Published dataset shape: {D_pub.shape}")
+
     D_pub_unique, counts = np.unique(
         D_pub.reshape(D_pub.shape[0], -1), axis=0, return_counts=True
     )
-    D_pub_unique = D_pub_unique.reshape(D_pub.shape[0], D_pub.shape[1], -1)
+    D_pub_unique = D_pub_unique.reshape(D_pub_unique.shape[0], D_pub.shape[1], 2)
 
     hd = hausdorff(D, D_pub_unique)
-    stats_df = make_stats_df(id, run, params, duration, counts, np.sum(counts), hd)
+    stats_df = make_stats_df(id, run, params, duration, len(counts), np.sum(counts), hd)
 
     indiv_hd_dists = individual_hausdorff(D, D_pub_unique)
     indiv_hd_df = make_indiv_hd_df(id, run, params, indiv_hd_dists, counts)
@@ -91,7 +96,7 @@ def experiment(id, run, D, bounds, M, params):
                 id,
                 run,
                 params,
-                t_int[1] - t_int[0],
+                t_int[1] - t_int[0] + 1,
                 radii,
                 distortions,
             )
@@ -113,5 +118,5 @@ def random_region(bounds):
             np.random.uniform(bounds[0][0], bounds[0][1]),
             np.random.uniform(bounds[1][0], bounds[1][1]),
         ),
-        np.random.uniform(span // 100, span // 10),
+        np.random.uniform(span // 100, span // 20),
     )

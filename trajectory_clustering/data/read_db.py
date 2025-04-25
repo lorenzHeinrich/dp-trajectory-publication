@@ -43,3 +43,19 @@ def t_drive(size: Literal["small", "medium", "all"] = "small"):
         (t_drive_data["y"].min() - 0.01, t_drive_data["y"].max() + 0.01),
     )
     return D, bounds
+
+
+def D_random(n: int, t: int, bounds: tuple):
+    """
+    Generate a random dataset of shape (n, t, 2) with coordinates in the given bounds.
+    :param n: Number of trajectories
+    :param t: Number of time steps
+    :param bounds: Bounds for the coordinates
+    :return: Random dataset and bounds
+    """
+    D = np.random.uniform(
+        low=[bounds[0][0], bounds[1][0]],
+        high=[bounds[0][1], bounds[1][1]],
+        size=(n, t, 2),
+    )
+    return D, bounds
