@@ -25,21 +25,23 @@ logger = logging.getLogger(__name__)
 def run_multiple_experiments(
     id, D, bounds, M, params, n_runs=16, parallelize=True, n_cpus=-1
 ):
-    results = []
+    results: list[tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]] = []
     if parallelize:
-        results = Parallel(n_jobs=n_cpus)(
+        result = Parallel(n_jobs=n_cpus)(
             delayed(experiment)(id, run, D, bounds, M, params) for run in range(n_runs)
         )
+        results.append(result)  # type: ignore
+
     else:
         for run in range(n_runs):
             result = experiment(id, run, D, bounds, M, params)
             results.append(result)
     logger.info(f"All runs completed for experiment {id}.")
 
-    # collect results
-    stats_dfs = [result[0] for result in results]  # type: ignore
-    indiv_hd_dfs = [result[1] for result in results]  # type: ignore
-    query_distortion_dfs = [result[2] for result in results]  # type: ignore
+    stats_dfs = [result[0] for result in results]
+
+    indiv_hd_dfs = [result[1] for result in results]
+    query_distortion_dfs = [result[2] for result in results]
 
     stats_df = pd.concat(stats_dfs, ignore_index=True)
     indiv_hd_df = pd.concat(indiv_hd_dfs, ignore_index=True)
@@ -80,8 +82,8 @@ def experiment(id, run, D, bounds, M, params):
     indiv_hd_df = make_indiv_hd_df(id, run, params, indiv_hd_dists, counts)
 
     t_range = np.arange(0, min(4, D_pub.shape[1] + 1))
-    t_ints = [(tl, tu) for tl in t_range for tu in t_range if tl < tu]
-    n_queries = 100
+    t_ints = [(tl, tu) for tl in t_range for tu in t_range if tl <= tu]
+    n_queries = 50
     query_distortion_dfs = []
 
     for t_int in t_ints:
@@ -118,5 +120,5 @@ def random_region(bounds):
             np.random.uniform(bounds[0][0], bounds[0][1]),
             np.random.uniform(bounds[1][0], bounds[1][1]),
         ),
-        np.random.uniform(span // 100, span // 20),
+        np.random.choice([span // 20, span // 40, span // 80]),
     )

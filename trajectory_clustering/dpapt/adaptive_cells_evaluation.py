@@ -114,13 +114,25 @@ if __name__ == "__main__":
 
     compare_default_var_eps(L, bounds, epsilons=[0.5, 1.5, 2.5], out_dir=out_dir)
 
-    f_m1 = lambda N, eps, c: max(10, 1 / 4 * np.ceil(np.ceil(np.sqrt(N / c))))
+    f_m1 = lambda N, eps, c: max(5, 1 / 4 * np.ceil(np.ceil(np.sqrt(N / c))))
     f_m2 = lambda nc, eps, c: int(np.ceil(np.sqrt(max(1, nc) / (c / 2))))
     compare_m2_eps(
-        L, bounds, f_m1=f_m1, f_m2=f_m2, epsilons=[0.5, 1.5, 2.5], out_dir=out_dir, c=10
+        L,
+        bounds,
+        f_m1=f_m1,
+        f_m2=f_m2,
+        epsilons=[0.5, 1.5, 2.5],
+        out_dir=out_dir,
+        c=200,
     )
     compare_m2_eps(
-        L, bounds, f_m1=f_m1, f_m2=f_m2, epsilons=[0.5, 1.5, 2.5], out_dir=out_dir, c=50
+        L,
+        bounds,
+        f_m1=f_m1,
+        f_m2=f_m2,
+        epsilons=[0.5, 1.5, 2.5],
+        out_dir=out_dir,
+        c=200,
     )
 
     for do_filter in [True, False]:

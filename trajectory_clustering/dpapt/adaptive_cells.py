@@ -178,10 +178,13 @@ def cell_to_center(cell):
 
 def AGkM(cells, counts, k):
     X = np.array([[(xl + xu) / 2, (yl + yu) / 2] for (xl, xu), (yl, yu) in cells])
-    props = np.abs(counts) / np.sum(np.abs(counts))
-    C = X[np.random.choice(X.shape[0], k, replace=False, p=props)]
 
-    km = KMeans(n_clusters=k, init=C).fit(X, sample_weight=counts)
+    max_k = min(k, X.shape[0])
+    counts_clipped = np.clip(counts, 0.01, None)
+    props = counts_clipped / np.sum(counts_clipped)
+    C = X[np.random.choice(X.shape[0], max_k, replace=False, p=props)]
+
+    km = KMeans(n_clusters=max_k, init=C).fit(X, sample_weight=counts_clipped)
     return km.labels_, km.cluster_centers_
 
 

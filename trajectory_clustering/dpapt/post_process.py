@@ -1,5 +1,8 @@
+import logging
 import numpy as np
 from trajectory_clustering.dpapt.adaptive_cells import cell_to_center
+
+logger = logging.getLogger(__name__)
 
 
 def post_process_with_uncertainty(D_areas, counts, sample=False, uniform=False):
@@ -16,6 +19,10 @@ def post_process_with_uncertainty(D_areas, counts, sample=False, uniform=False):
         D_out: np.ndarray of shape (sum(counts), m, 2) — point trajectories
         U_out: np.ndarray of shape (sum(counts), m)    — uncertainty radii
     """
+    if D_areas.shape[0] == 0:
+        logger.warning("D_areas is empty. Returning empty arrays.")
+        return np.empty((0, 0, 2)), np.empty((0, 0))
+
     total = np.sum(counts)
     m = D_areas.shape[1]
 

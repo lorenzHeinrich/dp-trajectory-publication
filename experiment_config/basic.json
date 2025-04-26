@@ -2,23 +2,20 @@
     "experiment_name": "basic",
     "output_dir": "results/dpapt/basic",
     "log_level": "INFO",
-    "dataset": "sample_dbs/t_drive_small.csv",
+    "dataset": "sample_dbs/t_drive_all.csv",
     "n_runs": 16,
     "parallelize": true,
     "n_cpus": -1,
     "dpapt": {
         "eps": [
-            1,
-            1.5,
-            2,
-            2.5,
-            3
+            1.0,
+            2.0,
+            3.0
         ],
         "tu": [
             1,
             2,
-            3,
-            4
+            3
         ]
     },
     "adaptive_cells": {
