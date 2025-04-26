@@ -4,7 +4,7 @@
     "log_level": "INFO",
     "dataset": "sample_dbs/t_drive_all.csv",
     "n_runs": 16,
-    "parallelize": false,
+    "parallelize": true,
     "n_cpus": -1,
     "dpapt": {
         "eps": [

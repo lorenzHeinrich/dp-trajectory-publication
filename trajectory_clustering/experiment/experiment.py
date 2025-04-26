@@ -27,10 +27,9 @@ def run_multiple_experiments(
 ):
     results: list[tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]] = []
     if parallelize:
-        result = Parallel(n_jobs=n_cpus)(
+        results = Parallel(n_jobs=n_cpus)(  # type: ignore
             delayed(experiment)(id, run, D, bounds, M, params) for run in range(n_runs)
         )
-        results.append(result)  # type: ignore
 
     else:
         for run in range(n_runs):
