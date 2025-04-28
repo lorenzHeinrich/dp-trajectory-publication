@@ -2,7 +2,7 @@
     "experiment_name": "eps_agnostic",
     "output_dir": "results/dpapt/eps_agnostic",
     "log_level": "INFO",
-    "dataset": "sample_dbs/t_drive_all.csv",
+    "dataset": "sample_dbs/t_drive_medium.csv",
     "n_runs": 16,
     "parallelize": true,
     "n_cpus": -1,

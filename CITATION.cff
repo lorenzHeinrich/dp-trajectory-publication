@@ -1,0 +1,22 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: DPAPT
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Lorenz
+    family-names: Heinrich
+    email: lorenz.heinrich@student.kit.edu
+    affiliation: Karlsruhe Institute of Technology
+repository-code: >-
+  https://github.com/lorenzHeinrich/dp-trajectory-publication
+abstract: >-
+  A differentially private mechanism for publishing
+  trajectory data
+keywords:
+  - 'Differential Privacy, Trajectory Data Mining'
+license: AGPL-3.0

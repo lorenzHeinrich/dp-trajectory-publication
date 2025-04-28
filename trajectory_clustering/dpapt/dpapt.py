@@ -155,7 +155,7 @@ class DPAPT:
         Check if trajectories in D are inside the area-trajectories in prev_trajects.
 
         D: array of shape (n, m, 2)
-        t_int: (tl, tu) — the time interval
+        t_int: (tl, tu) - the time interval
         prev_trajects: list of k area-trajectories, each a list of (tu - tl) Area objects
         Returns: boolean array of shape (n, k)
         """
