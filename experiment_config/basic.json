@@ -2,15 +2,16 @@
     "experiment_name": "basic",
     "output_dir": "results/dpapt/basic",
     "log_level": "INFO",
-    "dataset": "sample_dbs/t_drive_all.csv",
+    "dataset": "sample_dbs/t_drive_medium.csv",
     "n_runs": 16,
     "parallelize": true,
     "n_cpus": -1,
     "dpapt": {
         "eps": [
+            0.5,
             1.0,
-            2.0,
-            3.0
+            1.5,
+            2.0
         ],
         "tu": [
             1,
