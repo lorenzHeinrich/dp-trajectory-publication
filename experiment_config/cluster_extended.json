@@ -1,0 +1,48 @@
+{
+    "experiment_name": "cluster_extended",
+    "output_dir": "results/dpapt/cluster_extended",
+    "log_level": "INFO",
+    "dataset": "sample_dbs/t_drive_medium.csv",
+    "n_runs": 16,
+    "parallelize": true,
+    "n_cpus": -1,
+    "dpapt": {
+        "eps": [
+            1.0,
+            2.0,
+            3.0
+        ],
+        "tu": [
+            3,
+            7,
+            11,
+            15
+        ]
+    },
+    "adaptive_cells": {
+        "c": [
+            10
+        ],
+        "f_m1": [
+            "eps_sensitive"
+        ],
+        "f_m2": [
+            "eps_sensitive"
+        ],
+        "n_clusters": [
+            15,
+            25
+        ],
+        "do_filter": [
+            true
+        ]
+    },
+    "postprocess": {
+        "sample": [
+            false
+        ],
+        "uniform": [
+            false
+        ]
+    }
+}
