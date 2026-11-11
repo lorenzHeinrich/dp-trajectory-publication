@@ -1,10 +1,8 @@
 import logging
 
 import numpy as np
-
 from diffprivlib.mechanisms import Laplace
 from sklearn.cluster import KMeans
-
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +42,7 @@ class AdaptiveCells:
         N = max(1, lap.randomise(len(L)) if self.randomize else len(L))
 
         logger.debug(
-            f"Estimated N={N} with epsN={epsN} = {self.gamma} * {eps} - Error: {np.abs(N-len(L)) / len(L)}"
+            f"Estimated N={N} with epsN={epsN} = {self.gamma} * {eps} - Error: {np.abs(N - len(L)) / len(L)}"
         )
         m1 = self.f_m1(N, eps, self.c)
         logger.debug(f"m1={m1}")
